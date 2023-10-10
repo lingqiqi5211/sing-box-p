@@ -127,6 +127,7 @@ func (r *fakeRouter) NeedFindNeighbor() bool                     { return false 
 func (r *fakeRouter) NeighborResolver() adapter.NeighborResolver { return nil }
 func (r *fakeRouter) AppendTracker(adapter.ConnectionTracker)    {}
 func (r *fakeRouter) ResetNetwork()                              {}
+func (r *fakeRouter) Reload() {}
 
 type fakeRuleSet struct {
 	access                   sync.Mutex
