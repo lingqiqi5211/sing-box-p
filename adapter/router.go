@@ -28,6 +28,7 @@ type Router interface {
 	NeedFindProcess() bool
 	AppendTracker(tracker ConnectionTracker)
 	ResetNetwork()
+	Reload()
 }
 
 type ConnectionTracker interface {
