@@ -16,6 +16,23 @@ The universal proxy platform.
 
 https://sing-box.sagernet.org
 
+## Dialer
+
+```json
+{
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct",
+      "tcp_keep_alive_interval": "75s",
+      "tcp_keep_alive_idle": "10m"
+    }
+  ]
+}
+```
+
+TCP Keep alive options.
+
 ## DNS
 
 ### TCP
