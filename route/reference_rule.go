@@ -6,6 +6,7 @@ import (
 
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing/common"
 )
 
 type staticMatch uint8
@@ -27,9 +28,11 @@ func (m staticMatch) invert() staticMatch {
 	}
 }
 
-func evaluateClashMode(clashMode string, mode string, invert bool, otherConditions bool) staticMatch {
+func evaluateClashMode(clashMode []string, mode string, invert bool, otherConditions bool) staticMatch {
 	match := staticMatchUnknown
-	if clashMode != "" && !strings.EqualFold(clashMode, mode) {
+	if len(clashMode) > 0 && !common.Any(clashMode, func(it string) bool {
+		return strings.EqualFold(it, mode)
+	}) {
 		match = staticMatchNever
 	} else if !otherConditions {
 		match = staticMatchAlways
@@ -70,7 +73,7 @@ func evaluateRule(rule option.Rule, mode string) staticMatch {
 	switch rule.Type {
 	case C.RuleTypeDefault:
 		conditions := rule.DefaultOptions.RawDefaultRule
-		conditions.ClashMode = ""
+		conditions.ClashMode = nil
 		conditions.Invert = false
 		return evaluateClashMode(rule.DefaultOptions.ClashMode, mode, rule.DefaultOptions.Invert, !reflect.DeepEqual(conditions, option.RawDefaultRule{}))
 	case C.RuleTypeLogical:
@@ -88,7 +91,7 @@ func evaluateDNSRule(rule option.DNSRule, mode string) staticMatch {
 	switch rule.Type {
 	case C.RuleTypeDefault:
 		conditions := rule.DefaultOptions.RawDefaultDNSRule
-		conditions.ClashMode = ""
+		conditions.ClashMode = nil
 		conditions.Invert = false
 		return evaluateClashMode(rule.DefaultOptions.ClashMode, mode, rule.DefaultOptions.Invert, !reflect.DeepEqual(conditions, option.RawDefaultDNSRule{}))
 	case C.RuleTypeLogical:
