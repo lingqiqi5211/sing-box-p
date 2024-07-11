@@ -9278,6 +9278,9 @@
         },
         "reality": {
           "$ref": "#/$defs/InboundRealityOptions"
+        },
+        "reject_unknown_sni": {
+          "type": "boolean"
         }
       },
       "additionalProperties": false
