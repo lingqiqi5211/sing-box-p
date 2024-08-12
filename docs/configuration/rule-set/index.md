@@ -49,6 +49,7 @@
       "type": "remote",
       "tag": "", // or []
       "format": "source", // or binary
+      "path": "",
       "url": "",
       "initial_path": "",
       "http_client": "", // or {}
@@ -102,8 +103,6 @@ List of [Headless Rule](./headless-rule/).
 Format of rule-set file, `source` or `binary`.
 
 Optional when `path` or `url` uses `json` or `srs` as extension.
-
-### Local Fields
 
 #### path
 
