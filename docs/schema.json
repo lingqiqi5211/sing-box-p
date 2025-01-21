@@ -4962,6 +4962,9 @@
         },
         "debug": {
           "$ref": "#/$defs/DebugOptions"
+        },
+        "urltest_unified_delay": {
+          "type": "boolean"
         }
       },
       "additionalProperties": false
