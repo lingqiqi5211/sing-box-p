@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 
 	"go4.org/netipx"
@@ -90,8 +89,21 @@ func (r *IPCIDRItem) Match(metadata *adapter.InboundContext) bool {
 	if metadata.Destination.IsIP() {
 		return r.ipSet.Contains(metadata.Destination.Addr)
 	}
-	if len(metadata.DestinationAddresses) > 0 {
-		return common.Any(metadata.DestinationAddresses, r.ipSet.Contains)
+	addresses := metadata.DestinationAddresses
+	if len(addresses) > 0 || len(metadata.CacheIPs) > 0 {
+		for _, address := range addresses {
+			if r.ipSet.Contains(address) {
+				return true
+			}
+		}
+		if len(metadata.CacheIPs) > 0 {
+			for _, address := range metadata.CacheIPs {
+				if r.ipSet.Contains(address) {
+					return true
+				}
+			}
+		}
+		return false
 	}
 	return metadata.IPCIDRAcceptEmpty
 }
