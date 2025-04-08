@@ -251,7 +251,7 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 		if !options.AutoRoute {
 			return nil, E.New("`auto_route` is required by `auto_redirect`")
 		}
-		inbound.tunOptions.AutoRedirectMarkMode = true
+		inbound.tunOptions.AutoRedirectMarkMode = !options.AutoRedirectDisableMarkMode
 		usePlatformAutoRedirect := platformInterface != nil && platformInterface.UsePlatformAutoRedirect()
 		if usePlatformAutoRedirect {
 			inbound.autoRedirect, err = newPlatformAutoRedirect(inbound)
@@ -271,8 +271,11 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 		if err != nil {
 			return nil, E.Cause(err, "initialize auto-redirect")
 		}
+		if options.AutoRedirectDisableMarkMode && (len(inbound.routeRuleSet) > 0 || len(inbound.routeExcludeRuleSet) > 0) {
+			return nil, E.New("`auto_redirect` mark mode cannot be disabled with `route_address_set` or `route_exclude_address_set`")
+		}
 		inbound.dnsHijackByPort = inbound.tunOptions.DNSModeOrDefault() == tun.DNSModeHijack
-		if !usePlatformAutoRedirect && options.NetNs == "" {
+		if !usePlatformAutoRedirect && !options.AutoRedirectDisableMarkMode && options.NetNs == "" {
 			err = networkManager.RegisterAutoRedirectOutputMark(inbound.tunOptions.AutoRedirectOutputMark)
 			if err != nil {
 				return nil, err
