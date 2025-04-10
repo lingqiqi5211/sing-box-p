@@ -57,6 +57,11 @@ type Server struct {
 	externalUI               string
 	externalUIDownloadURL    string
 	externalUIDownloadDetour string
+	externalUIUpdateInterval time.Duration
+	cacheFile                adapter.CacheFile
+	lastEtag                 string
+	lastUpdated              time.Time
+	ticker                   *time.Ticker
 }
 
 func NewServer(ctx context.Context, logFactory log.ObservableFactory, options option.ClashAPIOptions) (adapter.LifecycleService, error) {
@@ -73,6 +78,10 @@ func NewServer(ctx context.Context, logFactory log.ObservableFactory, options op
 		return nil, E.New("missing clash mode manager")
 	}
 	chiRouter := chi.NewRouter()
+	updateInterval := max(time.Duration(options.ExternalUIUpdateInterval), 0)
+	if updateInterval > 0 && updateInterval < time.Hour {
+		updateInterval = time.Hour
+	}
 	s := &Server{
 		ctx:       ctx,
 		network:   service.FromContext[adapter.NetworkManager](ctx),
@@ -92,6 +101,8 @@ func NewServer(ctx context.Context, logFactory log.ObservableFactory, options op
 		externalController:       options.ExternalController != "",
 		externalUIDownloadURL:    options.ExternalUIDownloadURL,
 		externalUIDownloadDetour: options.ExternalUIDownloadDetour,
+		externalUIUpdateInterval: updateInterval,
+		cacheFile:                service.FromContext[adapter.CacheFile](ctx),
 	}
 	//goland:noinspection GoDeprecation
 	//nolint:staticcheck
@@ -152,7 +163,18 @@ func (s *Server) Start(stage adapter.StartStage) error {
 		return nil
 	}
 	if s.externalController {
-		s.checkAndDownloadExternalUI()
+		if s.externalUI != "" && s.externalUIUpdateInterval != 0 {
+			if s.cacheFile != nil {
+				if savedExternalUI := s.cacheFile.LoadExternalUI("ExternalUI"); savedExternalUI != nil {
+					s.lastUpdated = savedExternalUI.LastUpdated
+					s.lastEtag = savedExternalUI.LastEtag
+				}
+			}
+		}
+		s.checkAndDownloadExternalUI(false)
+		if s.externalUIUpdateInterval != 0 && !s.lastUpdated.IsZero() {
+			go s.loopUpdate()
+		}
 		var (
 			listener net.Listener
 			err      error
@@ -179,7 +201,26 @@ func (s *Server) Start(stage adapter.StartStage) error {
 	return nil
 }
 
+func (s *Server) loopUpdate() {
+	s.ticker = time.NewTicker(s.externalUIUpdateInterval)
+	if time.Since(s.lastUpdated) > s.externalUIUpdateInterval {
+		s.checkAndDownloadExternalUI(true)
+	}
+	for {
+		runtime.GC()
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-s.ticker.C:
+			s.checkAndDownloadExternalUI(true)
+		}
+	}
+}
+
 func (s *Server) Close() error {
+	if s.ticker != nil {
+		s.ticker.Stop()
+	}
 	return common.Close(
 		common.PtrOrNil(s.httpServer),
 	)
