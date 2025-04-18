@@ -117,6 +117,9 @@ func (r *RuleSet) UnmarshalJSON(bytes []byte) error {
 			if r.RemoteOptions.InitialPath != "" && !strings.Contains(r.RemoteOptions.InitialPath, C.RuleSetTagPlaceholder) {
 				return E.New("missing ", C.RuleSetTagPlaceholder, " placeholder in initial_path")
 			}
+			if r.Path != "" && !strings.Contains(r.Path, C.RuleSetTagPlaceholder) {
+				return E.New("missing ", C.RuleSetTagPlaceholder, " placeholder in path")
+			}
 		}
 	}
 	return nil
