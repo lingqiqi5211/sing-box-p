@@ -591,7 +591,6 @@ func (t *TLSOptions) Build() *option.OutboundTLSOptions {
 		Enabled:              t.TLS,
 		ServerName:           t.SNI,
 		Insecure:             t.SkipCertVerify,
-		CertificatePinSHA256: t.Fingerprint,
 		ALPN:                 t.ALPN,
 		UTLS:                 clashClientFingerprint(t.ClientFingerprint),
 		Certificate:          trimStringArray(strings.Split(t.CustomCAString, "\n")),
