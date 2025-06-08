@@ -105,6 +105,14 @@ func (m *ConnectionManager) TrackPacketConn(conn net.PacketConn) net.PacketConn 
 	return tracked
 }
 
+func notifyConnectionFailure(ctx context.Context, chain []adapter.Outbound) {
+	for _, outbound := range chain {
+		if listener, ok := outbound.(adapter.ConnectionFailureListener); ok {
+			listener.OnConnectionFailure(ctx)
+		}
+	}
+}
+
 func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	ctx = adapter.WithContext(ctx, &metadata)
 	var (
@@ -127,6 +135,7 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		if outbound, isOutbound := this.(adapter.Outbound); isOutbound {
 			dialerString = " using outbound/" + outbound.Type() + "[" + outbound.Tag() + "]"
 		}
+		notifyConnectionFailure(ctx, metadata.OutboundChain)
 		err = E.Cause(err, "open connection to ", remoteString, dialerString)
 		m.deleteURLTestHistory(metadata.OutboundChain)
 		N.CloseOnHandshakeFailure(conn, onClose, err)
@@ -216,6 +225,7 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 			if outbound, isOutbound := this.(adapter.Outbound); isOutbound {
 				dialerString = " using outbound/" + outbound.Type() + "[" + outbound.Tag() + "]"
 			}
+			notifyConnectionFailure(ctx, metadata.OutboundChain)
 			err = E.Cause(err, "open packet connection to ", remoteString, dialerString)
 			m.deleteURLTestHistory(metadata.OutboundChain)
 			N.CloseOnHandshakeFailure(conn, onClose, err)
@@ -240,7 +250,8 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 			if outbound, isOutbound := this.(adapter.Outbound); isOutbound {
 				dialerString = " using outbound/" + outbound.Type() + "[" + outbound.Tag() + "]"
 			}
-			err = E.Cause(err, "listen packet connection using ", dialerString)
+			notifyConnectionFailure(ctx, metadata.OutboundChain)
+			err = E.Cause(err, "listen packet connection", dialerString)
 			m.deleteURLTestHistory(metadata.OutboundChain)
 			N.CloseOnHandshakeFailure(conn, onClose, err)
 			m.logger.ErrorContext(ctx, err)
