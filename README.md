@@ -16,7 +16,27 @@ The universal proxy platform.
 
 https://sing-box.sagernet.org
 
-## URLTest Fallback 支持
+## DNS
+
+### TCP
+
+```json
+{
+  "dns": {
+    "servers": [
+      {
+        "type": "tcp",
+        "tag": "cloudlfare-tcp",
+        "server": "1.1.1.1",
+        "server_port": 53,
+        "reuse": true
+      }
+    ]
+  }
+}
+```
+
+- `reuse`: Reuse TCP connection.
 
 按照**可用性**和**顺序**选择出站
 
