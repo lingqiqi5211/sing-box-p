@@ -139,6 +139,11 @@ type RemoteDNSServerOptions struct {
 	DNSServerAddressOptions
 }
 
+type RemoteTCPDNSServerOptions struct {
+	RemoteDNSServerOptions
+	Reuse bool `json:"reuse,omitempty"`
+}
+
 type RemoteTLSDNSServerOptions struct {
 	RemoteDNSServerOptions
 	OutboundTLSOptionsContainer
