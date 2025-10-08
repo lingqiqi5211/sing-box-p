@@ -26,6 +26,7 @@ type Router interface {
 	NeedFindProcess() bool
 	NeedFindNeighbor() bool
 	NeighborResolver() NeighborResolver
+	Rule(uuid string) (Rule, bool)
 	AppendTracker(tracker ConnectionTracker)
 	ResetNetwork()
 	Reload()
