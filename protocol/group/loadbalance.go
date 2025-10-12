@@ -555,8 +555,6 @@ func getKey(metadata *adapter.InboundContext) string {
 	var metadataHost string
 	if metadata.Destination.IsDomain() {
 		metadataHost = metadata.Destination.Fqdn
-	} else if metadata.SniffHost != "" {
-		metadataHost = metadata.SniffHost
 	} else {
 		metadataHost = metadata.Domain
 	}
