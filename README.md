@@ -25,7 +25,8 @@ https://sing-box.sagernet.org
       "type": "direct",
       "tag": "direct",
       "tcp_keep_alive_interval": "75s",
-      "tcp_keep_alive_idle": "10m"
+      "tcp_keep_alive_idle": "10m",
+      "disable_tcp_keep_alive": false
     }
   ]
 }
