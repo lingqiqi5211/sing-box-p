@@ -170,6 +170,9 @@ func (r *Router) matchDNS(ctx context.Context, allowFakeIP bool, ruleIndex int, 
 				if action.ClientSubnet.IsValid() {
 					options.ClientSubnet = action.ClientSubnet
 				}
+				if action.LazyCacheTTL != nil {
+					options.LazyCacheTTL = action.LazyCacheTTL
+				}
 				if legacyTransport, isLegacy := transport.(adapter.LegacyDNSTransport); isLegacy {
 					if options.Strategy == C.DomainStrategyAsIS {
 						options.Strategy = legacyTransport.LegacyStrategy()
@@ -191,6 +194,9 @@ func (r *Router) matchDNS(ctx context.Context, allowFakeIP bool, ruleIndex int, 
 				}
 				if action.ClientSubnet.IsValid() {
 					options.ClientSubnet = action.ClientSubnet
+				}
+				if action.LazyCacheTTL != nil {
+					options.LazyCacheTTL = action.LazyCacheTTL
 				}
 			case *R.RuleActionReject:
 				return nil, currentRule, currentRuleIndex
