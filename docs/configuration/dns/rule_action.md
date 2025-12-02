@@ -24,7 +24,8 @@ icon: material/new-box
   "strategy": "",
   "disable_cache": false,
   "rewrite_ttl": null,
-  "client_subnet": null
+  "client_subnet": null,
+  "lazy_cache_ttl": null
 }
 ```
 
@@ -125,6 +126,12 @@ This action does not send a new DNS query and has no extra options.
 
 Only allowed after a preceding top-level `evaluate` rule. If the action is reached without an evaluated response at runtime, the request fails with an error instead of falling through to later rules.
 
+#### lazy_cache_ttl
+
+Serve expired cached response with given extra ttl for this rule. It will attempt to refresh the query in the background.
+
+Takes priority over the global `dns.lazy_cache_ttl` setting.
+
 ### route-options
 
 ```json
@@ -132,7 +139,8 @@ Only allowed after a preceding top-level `evaluate` rule. If the action is reach
   "action": "route-options",
   "disable_cache": false,
   "rewrite_ttl": null,
-  "client_subnet": null
+  "client_subnet": null,
+  "lazy_cache_ttl": null
 }
 ```
 

@@ -24,7 +24,8 @@ icon: material/new-box
   "strategy": "",
   "disable_cache": false,
   "rewrite_ttl": null,
-  "client_subnet": null
+  "client_subnet": null,
+  "lazy_cache_ttl": null
 }
 ```
 
@@ -123,6 +124,12 @@ icon: material/new-box
 
 只能用于前面已有顶层 `evaluate` 规则的场景。如果运行时命中该动作时没有已评估的响应，则请求会直接返回错误，而不是继续匹配后续规则。
 
+#### lazy_cache_ttl
+
+为此规则提供已过期的缓存响应，并使用给定的额外 TTL。它将尝试在后台刷新查询。
+
+优先级高于全局的 `dns.lazy_cache_ttl` 设置。
+
 ### route-options
 
 ```json
@@ -130,7 +137,8 @@ icon: material/new-box
   "action": "route-options",
   "disable_cache": false,
   "rewrite_ttl": null,
-  "client_subnet": null
+  "client_subnet": null,
+  "lazy_cache_ttl": null
 }
 ```
 

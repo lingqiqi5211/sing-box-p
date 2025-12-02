@@ -291,6 +291,9 @@ func (r *Router) matchDNS(ctx context.Context, rules []adapter.DNSRule, allowFak
 				if action.ClientSubnet.IsValid() {
 					options.ClientSubnet = action.ClientSubnet
 				}
+				if action.LazyCacheTTL != nil {
+					options.LazyCacheTTL = action.LazyCacheTTL
+				}
 				return transport, currentRule, currentRuleIndex
 			case *R.RuleActionDNSRouteOptions:
 				if action.Strategy != C.DomainStrategyAsIS {
@@ -304,6 +307,9 @@ func (r *Router) matchDNS(ctx context.Context, rules []adapter.DNSRule, allowFak
 				}
 				if action.ClientSubnet.IsValid() {
 					options.ClientSubnet = action.ClientSubnet
+				}
+				if action.LazyCacheTTL != nil {
+					options.LazyCacheTTL = action.LazyCacheTTL
 				}
 			case *R.RuleActionReject:
 				return nil, currentRule, currentRuleIndex
