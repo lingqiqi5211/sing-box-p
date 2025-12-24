@@ -70,6 +70,7 @@ func NewRouter(ctx context.Context, logFactory log.Factory, options option.DNSOp
 		ClientSubnet:     options.DNSClientOptions.ClientSubnet.Build(netip.Prefix{}),
 		MinCacheTTL:      options.DNSClientOptions.MinCacheTTL,
 		MaxCacheTTL:      options.DNSClientOptions.MaxCacheTTL,
+		LazyCacheTTL:     options.DNSClientOptions.LazyCacheTTL,
 		RDRC: func() adapter.RDRCStore {
 			cacheFile := service.FromContext[adapter.CacheFile](ctx)
 			if cacheFile == nil {
@@ -404,7 +405,7 @@ func (r *Router) exchangeWithRules(ctx context.Context, rules []adapter.DNSRule,
 			if exchangeOptions.Strategy == C.DomainStrategyAsIS {
 				exchangeOptions.Strategy = r.defaultDomainStrategy
 			}
-			response, err := r.client.Exchange(adapter.OverrideContext(ctx), transport, message, exchangeOptions, nil)
+			response, err, _ := r.client.Exchange(adapter.OverrideContext(ctx), transport, message, exchangeOptions, nil)
 			if err != nil {
 				r.logger.ErrorContext(ctx, E.Cause(err, "exchange failed for ", FormatQuestion(message.Question[0].String())))
 				evaluatedResponse = nil
@@ -437,7 +438,7 @@ func (r *Router) exchangeWithRules(ctx context.Context, rules []adapter.DNSRule,
 			if exchangeOptions.Strategy == C.DomainStrategyAsIS {
 				exchangeOptions.Strategy = r.defaultDomainStrategy
 			}
-			response, err := r.client.Exchange(adapter.OverrideContext(ctx), transport, message, exchangeOptions, nil)
+			response, err, _ := r.client.Exchange(adapter.OverrideContext(ctx), transport, message, exchangeOptions, nil)
 			return exchangeWithRulesResult{
 				response:  response,
 				transport: transport,
@@ -474,7 +475,7 @@ func (r *Router) exchangeWithRules(ctx context.Context, rules []adapter.DNSRule,
 	if exchangeOptions.Strategy == C.DomainStrategyAsIS {
 		exchangeOptions.Strategy = r.defaultDomainStrategy
 	}
-	response, err := r.client.Exchange(adapter.OverrideContext(ctx), transport, message, exchangeOptions, nil)
+	response, err, _ := r.client.Exchange(adapter.OverrideContext(ctx), transport, message, exchangeOptions, nil)
 	return exchangeWithRulesResult{
 		response:  response,
 		transport: transport,
@@ -604,6 +605,7 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 		response  *mDNS.Msg
 		transport adapter.DNSTransport
 		err       error
+		stale     bool
 	)
 	var metadata *adapter.InboundContext
 	ctx, metadata = adapter.ExtendContext(ctx)
@@ -623,7 +625,7 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 		if options.Strategy == C.DomainStrategyAsIS {
 			options.Strategy = r.defaultDomainStrategy
 		}
-		response, err = r.client.Exchange(ctx, transport, message, options, nil)
+		response, err, stale = r.client.Exchange(ctx, transport, message, options, nil)
 	} else if !legacyDNSMode {
 		exchangeResult := r.exchangeWithRules(ctx, rules, message, options, true)
 		response, transport, err = exchangeResult.response, exchangeResult.transport, exchangeResult.err
@@ -663,7 +665,7 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 			if dnsOptions.Strategy == C.DomainStrategyAsIS {
 				dnsOptions.Strategy = r.defaultDomainStrategy
 			}
-			response, err = r.client.Exchange(dnsCtx, transport, message, dnsOptions, responseCheck)
+			response, err, stale = r.client.Exchange(dnsCtx, transport, message, dnsOptions, responseCheck)
 			var rejected bool
 			if err != nil {
 				if errors.Is(err, ErrResponseRejectedCached) {
@@ -687,6 +689,10 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 done:
 	if err != nil {
 		return nil, err
+	}
+	if stale {
+		r.logger.DebugContext(ctx, "updating stale cache ", FormatQuestion(message.Question[0].String()))
+		go r.Exchange(r.client.UpdateDnsCacheToContext(context.WithoutCancel(ctx)), message, options)
 	}
 	if r.dnsReverseMapping != nil && len(message.Question) > 0 && response != nil && len(response.Answer) > 0 {
 		if transport == nil || transport.Type() != C.DNSTypeFakeIP {
@@ -715,6 +721,7 @@ func (r *Router) Lookup(ctx context.Context, domain string, options adapter.DNSQ
 	var (
 		responseAddrs []netip.Addr
 		err           error
+		stale         bool
 	)
 	printResult := func() {
 		if err == nil && len(responseAddrs) == 0 {
@@ -746,7 +753,7 @@ func (r *Router) Lookup(ctx context.Context, domain string, options adapter.DNSQ
 		if options.Strategy == C.DomainStrategyAsIS {
 			options.Strategy = r.defaultDomainStrategy
 		}
-		responseAddrs, err = r.client.Lookup(ctx, transport, domain, options, nil)
+		responseAddrs, err, stale = r.client.Lookup(ctx, transport, domain, options, nil)
 	} else if !legacyDNSMode {
 		responseAddrs, err = r.lookupWithRules(ctx, rules, domain, options)
 	} else {
@@ -786,12 +793,16 @@ func (r *Router) Lookup(ctx context.Context, domain string, options adapter.DNSQ
 			if dnsOptions.Strategy == C.DomainStrategyAsIS {
 				dnsOptions.Strategy = r.defaultDomainStrategy
 			}
-			responseAddrs, err = r.client.Lookup(dnsCtx, transport, domain, dnsOptions, responseCheck)
+			responseAddrs, err, stale = r.client.Lookup(dnsCtx, transport, domain, dnsOptions, responseCheck)
 			if responseCheck == nil || err == nil {
 				break
 			}
 			printResult()
 		}
+	}
+	if stale {
+		r.logger.DebugContext(ctx, "updating stale cache for lookup ", domain)
+		go r.Lookup(r.client.UpdateDnsCacheToContext(context.WithoutCancel(ctx)), domain, options)
 	}
 response:
 	printResult()
