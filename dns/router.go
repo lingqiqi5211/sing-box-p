@@ -428,6 +428,10 @@ func isAddressQuery(message *mDNS.Msg) bool {
 	return false
 }
 
+func (r *Router) Rules() []adapter.DNSRule {
+	return r.rules
+}
+
 func (r *Router) ClearCache() {
 	r.client.ClearCache()
 	if r.platformInterface != nil {
