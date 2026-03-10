@@ -503,7 +503,7 @@ func (g *URLTestGroup) CheckOutbounds(force bool) {
 }
 
 func (g *URLTestGroup) URLTest(ctx context.Context) (map[string]uint16, error) {
-	return g.urlTest(ctx, false)
+	return g.urlTest(ctx, true)
 }
 
 func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint16, error) {

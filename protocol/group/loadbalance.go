@@ -449,7 +449,7 @@ func (g *LoadBalanceGroup) CheckOutbounds(force bool) {
 }
 
 func (g *LoadBalanceGroup) URLTest(ctx context.Context) (map[string]uint16, error) {
-	return g.urlTest(ctx, false)
+	return g.urlTest(ctx, true)
 }
 
 func (g *LoadBalanceGroup) urlTest(ctx context.Context, force bool) (map[string]uint16, error) {
