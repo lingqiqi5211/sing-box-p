@@ -102,6 +102,7 @@
   "handshake_window": "",
   "explicit_exit_notify": 0,
   "system": false,
+  "inner_domain_resolver": "", // or {}
   "name": "",
   "mtu": 1500,
   "on_demand": false,
@@ -691,6 +692,16 @@ Notification 之间间隔一秒。设为 `0` 时禁用。
 endpoint 会配置接口地址和 MTU，但不会安装操作系统路由或 DNS 设置。
 
 禁用时，sing-box 使用内部网络栈。
+
+### inner_domain_resolver
+
+指定将此 endpoint 用作出站时，解析目标域名所使用的 DNS 解析器。适用于 TCP 和 UDP。
+
+此选项使用与 [domain_resolver](/zh/configuration/shared/dial/#domain_resolver) 相同的格式。
+
+未设置时，使用现有 DNS 路由规则及默认 DNS。目标为 IP 地址时不进行域名解析。
+
+此选项不影响 VPN 服务器地址的解析；服务器地址仍使用拨号字段中的 `domain_resolver`。
 
 ### name
 

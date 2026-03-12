@@ -22,6 +22,7 @@
   "tls": {},
   "advertise_routes": [],
   "system": false,
+  "inner_domain_resolver": "", // or {}
   "name": "",
   "mtu": 1280,
   "on_demand": false,
@@ -106,6 +107,16 @@ The endpoint configures interface addresses and MTU but does not install
 operating-system routes or DNS settings.
 
 If disabled, sing-box uses the internal network stack.
+
+### inner_domain_resolver
+
+Set the DNS resolver used for destination domain names when this endpoint is selected as an outbound. Applies to TCP and UDP.
+
+This option uses the same format as [domain_resolver](/configuration/shared/dial/#domain_resolver).
+
+When unset, existing DNS routing rules and the default DNS apply. IP destinations do not require domain resolution.
+
+This option does not affect MASQUE server address resolution, which continues to use `domain_resolver` from the dial fields.
 
 ### name
 
