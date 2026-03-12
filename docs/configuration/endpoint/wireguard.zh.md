@@ -34,6 +34,7 @@
   ... // UDP NAT 字段
 
   "workers": 0,
+  "inner_domain_resolver": "", // 或 {}
 
   ... // 拨号字段
 }
@@ -131,6 +132,14 @@ WireGuard worker 数量。
 ### UDP NAT 字段
 
 参阅 [UDP NAT 字段](/zh/configuration/shared/udp-nat/)。
+
+#### inner_domain_resolver
+
+设置用于解析通过 WireGuard 隊道的连接的域名解析器。
+
+此选项与 [domain_resolver](/zh/configuration/shared/dial/#domain_resolver) 格式相同。
+
+未设置时使用默认DNS。
 
 ### 拨号字段
 
