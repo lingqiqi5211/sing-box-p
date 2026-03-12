@@ -4512,6 +4512,9 @@
             "fallback_delay": {
               "$ref": "#/$defs/Duration"
             },
+            "inner_domain_resolver": {
+              "$ref": "#/$defs/DomainResolver"
+            },
             "state_directory": {
               "type": "string"
             },
@@ -4697,6 +4700,9 @@
             },
             "workers": {
               "type": "integer"
+            },
+            "inner_domain_resolver": {
+              "$ref": "#/$defs/DomainResolver"
             },
             "detour": {
               "type": "string",
@@ -12774,6 +12780,9 @@
                   "additionalProperties": false
                 }
               ]
+            },
+            "inner_domain_resolver": {
+              "$ref": "#/$defs/DomainResolver"
             }
           },
           "required": [
