@@ -16,6 +16,7 @@
   "tag": "oc-client",
 
   "system": false,
+  "inner_domain_resolver": "", // or {}
   "name": "",
 
   ... // UDP NAT Fields
@@ -130,6 +131,16 @@ Use a system interface.
 Requires privilege and cannot conflict with existing system interfaces.
 
 If disabled, sing-box uses the internal network stack.
+
+### inner_domain_resolver
+
+Set the DNS resolver used for destination domain names when this endpoint is selected as an outbound. Applies to TCP and UDP.
+
+This option uses the same format as [domain_resolver](/configuration/shared/dial/#domain_resolver).
+
+When unset, existing DNS routing rules and the default DNS apply. IP destinations do not require domain resolution.
+
+This option does not affect VPN server address resolution, which continues to use `domain_resolver` from the dial fields.
 
 ### name
 
