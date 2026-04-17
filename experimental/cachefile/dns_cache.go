@@ -1,6 +1,7 @@
 package cachefile
 
 import (
+	"bytes"
 	"encoding/binary"
 	"time"
 
@@ -50,6 +51,37 @@ func (c *CacheFile) SaveDNSCache(transportName string, qName string, qType uint1
 	c.queueDNSCache(transportName, qName, qType, rawMessage, expireAt)
 	c.Flush()
 	return nil
+}
+
+func (c *CacheFile) DeleteDNSCache(transportName string, qName string, qType uint16, rawMessage []byte) {
+	key := saveCacheKey{transportName, qName, qType}
+	c.pendingAccess.RLock()
+	_, hasPending := c.pending.dnsCache[key]
+	if !hasPending && c.writing != nil {
+		_, hasPending = c.writing.dnsCache[key]
+	}
+	c.pendingAccess.RUnlock()
+	if hasPending {
+		return
+	}
+	_ = c.update(func(tx *bbolt.Tx) error {
+		bucket := c.bucket(tx, bucketDNSCache)
+		if bucket == nil {
+			return nil
+		}
+		transportBucket := bucket.Bucket([]byte(transportName))
+		if transportBucket == nil {
+			return nil
+		}
+		content := getCacheEntry(bucket, key)
+		if len(content) < 8 || !bytes.Equal(content[8:], rawMessage) {
+			return nil
+		}
+		keyBytes := make([]byte, 2+len(qName))
+		binary.BigEndian.PutUint16(keyBytes, qType)
+		copy(keyBytes[2:], qName)
+		return transportBucket.Delete(keyBytes)
+	})
 }
 
 func (c *CacheFile) SaveDNSCacheAsync(transportName string, qName string, qType uint16, rawMessage []byte, expireAt time.Time, logger logger.Logger) {
