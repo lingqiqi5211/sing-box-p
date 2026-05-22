@@ -6836,6 +6836,16 @@
             },
             "managed": {
               "type": "boolean"
+            },
+            "obfs_mode": {
+              "type": "string",
+              "enum": [
+                "http",
+                "tls"
+              ]
+            },
+            "obfs_host": {
+              "type": "string"
             }
           },
           "required": [
