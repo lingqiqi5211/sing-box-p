@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
@@ -20,10 +21,15 @@ import (
 
 	anytls "github.com/anytls/sing-anytls"
 	"github.com/anytls/sing-anytls/session"
+	"github.com/anytls/sing-anytls/util"
 )
 
 func RegisterOutbound(registry *outbound.Registry) {
 	outbound.Register[option.AnyTLSOutboundOptions](registry, C.TypeAnyTLS, NewOutbound)
+
+	if !strings.Contains(util.Version, "sing-box") {
+		util.Version = util.Version + " sing-box/" + C.Version
+	}
 }
 
 var (
@@ -86,6 +92,7 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 		IdleSessionCheckInterval: options.IdleSessionCheckInterval.Build(),
 		IdleSessionTimeout:       options.IdleSessionTimeout.Build(),
 		MinIdleSession:           options.MinIdleSession,
+		DisableReuse:             options.DisableReuse,
 		DialOut:                  outbound.dialOut,
 		Logger:                   logger,
 	}
