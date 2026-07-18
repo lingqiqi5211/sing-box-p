@@ -29,11 +29,12 @@ func RegisterOutbound(registry *outbound.Registry) {
 }
 
 var (
-	_ N.ParallelDialer                = (*Outbound)(nil)
-	_ dialer.ParallelNetworkDialer    = (*Outbound)(nil)
-	_ dialer.DirectDialer             = (*Outbound)(nil)
-	_ adapter.FlowOutbound            = (*Outbound)(nil)
-	_ adapter.InterfaceUpdateListener = (*Outbound)(nil)
+	_ N.ParallelDialer                   = (*Outbound)(nil)
+	_ dialer.ParallelNetworkDialer       = (*Outbound)(nil)
+	_ dialer.DirectDialer                = (*Outbound)(nil)
+	_ adapter.FlowOutbound               = (*Outbound)(nil)
+	_ adapter.FlowOutboundDomainResolver = (*Outbound)(nil)
+	_ adapter.InterfaceUpdateListener    = (*Outbound)(nil)
 )
 
 type Outbound struct {
@@ -47,6 +48,7 @@ type Outbound struct {
 	isEmpty        bool
 	myAddresses    common.TypedValue[[]netip.Prefix]
 	icmpPort       *ping.Port
+	domainResolveOptions adapter.DNSQueryOptions
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.DirectOutboundOptions) (adapter.Outbound, error) {
@@ -75,6 +77,11 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 		isEmpty: reflect.DeepEqual(options.DialerOptions, option.DialerOptions{
 			AbstractDialerOptions: option.AbstractDialerOptions{UDPFragmentDefault: true},
 		}),
+	}
+	// Snapshot the eagerly resolved options before the dialer's lazy initialization
+	// can write them during the first concurrent L4 connection.
+	if resolveDialer, loaded := outboundDialer.(dialer.ResolveDialer); loaded {
+		outbound.domainResolveOptions = resolveDialer.QueryOptions()
 	}
 	//nolint:staticcheck
 	if options.ProxyProtocol != 0 {
@@ -192,6 +199,10 @@ func (h *Outbound) PreMatchFlow(network string, destination netip.Addr) adapter.
 		return adapter.PreMatchFlow
 	}
 	return adapter.PreMatchContinue
+}
+
+func (h *Outbound) FlowDomainResolveOptions() adapter.DNSQueryOptions {
+	return h.domainResolveOptions
 }
 
 func (h *Outbound) PortAddresses() (netip.Addr, netip.Addr) {
