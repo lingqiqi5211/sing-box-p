@@ -52,6 +52,8 @@ type Outbound struct {
 	logger         log.ContextLogger
 }
 
+var _ adapter.InterfaceUpdateListener = (*Outbound)(nil)
+
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.AnyTLSOutboundOptions) (adapter.Outbound, error) {
 	outbound := &Outbound{
 		Adapter: outbound.NewAdapterWithDialerOptions(C.TypeAnyTLS, tag, []string{N.NetworkTCP, N.NetworkUDP}, options.DialerOptions),
@@ -149,9 +151,6 @@ func (h *Outbound) MultiplexEnabled() bool {
 	return true
 }
 
-func (h *Outbound) InterfaceUpdated(ctx context.Context) {
-}
-
 func (h *Outbound) CloseIdleConnections() {
 }
 
@@ -176,6 +175,12 @@ func (h *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 	metadata.Destination = destination
 	h.logger.InfoContext(ctx, "outbound UoT packet connection to ", destination)
 	return h.uotClient.ListenPacket(ctx, destination)
+}
+
+func (h *Outbound) InterfaceUpdated(context.Context) {
+	if h.client != nil {
+		h.client.Reset()
+	}
 }
 
 func (h *Outbound) Close() error {
