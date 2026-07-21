@@ -209,10 +209,11 @@ func configurationFromClientEvent(event ovpn.TunnelConfigurationEvent, logger lo
 			} else {
 				routes = append(routes, ovpntransport.Route{
 					Prefix:  inet4DefaultRoute,
-					Gateway: configuration.VPNGateway,
-					Metric:  configuration.RouteMetric,
-				})
-			}
+				Gateway: configuration.VPNGateway,
+				Metric:  configuration.RouteMetric,
+			})
+			hasInet4DefaultRoute = true
+		}
 		}
 		if hasOpenVPNFlag(configuration.RedirectGatewayFlags, "ipv6") && !hasInet6DefaultRoute {
 			for _, prefix := range []netip.Prefix{
