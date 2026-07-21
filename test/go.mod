@@ -4,7 +4,10 @@ go 1.25.5
 
 require github.com/sagernet/sing-box v0.0.0
 
-replace github.com/sagernet/sing-box => ../
+replace (
+	github.com/anytls/sing-anytls => github.com/reF1nd/sing-anytls v0.0.14-0.20260721174145-21bcd8c411da
+	github.com/sagernet/sing-box => ../
+)
 
 require (
 	github.com/docker/docker v27.3.1+incompatible
