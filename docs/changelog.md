@@ -2,7 +2,7 @@
 icon: material/alert-decagram
 ---
 
-#### 1.14.0-alpha.50
+#### 1.14.0-alpha.49
 
 * Improve OpenVPN interoperability **1**
 * Improve OpenConnect interoperability **2**
