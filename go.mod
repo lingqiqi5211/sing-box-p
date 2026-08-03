@@ -84,7 +84,7 @@ require (
 )
 
 replace (
-	github.com/anytls/sing-anytls => github.com/reF1nd/sing-anytls v0.0.14-0.20260721174145-21bcd8c411da
+	github.com/anytls/sing-anytls => github.com/reF1nd/sing-anytls v0.0.14-0.20260803151749-763fb5bccb9d
 )
 
 require (
