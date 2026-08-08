@@ -33,6 +33,11 @@ type TrafficCounters struct {
 	DownloadBytes atomic.Int64
 }
 
+type ConnectionHistorySink interface {
+	ConnectionOpened(metadata TrackerMetadata)
+	ConnectionClosed(metadata TrackerMetadata)
+}
+
 type ConnectionObserver interface {
 	TrafficCounters(metadata TrackerMetadata) *TrafficCounters
 	ConnectionOpened(metadata TrackerMetadata)
@@ -60,10 +65,12 @@ type Manager struct {
 	closedDownloadTotal     int64
 	closedConnectionsLimit  int
 
-	eventSubscriber *observable.Subscriber[ConnectionEvent]
-	eventObserver   *observable.Observer[ConnectionEvent]
-	observer        atomic.Pointer[connectionObserverHolder]
-	cleaner         *cleanup.Cleaner
+	eventSubscriber   *observable.Subscriber[ConnectionEvent]
+	eventObserver     *observable.Observer[ConnectionEvent]
+	observer          atomic.Pointer[connectionObserverHolder]
+	historySinkAccess sync.RWMutex
+	historySink       ConnectionHistorySink
+	cleaner           *cleanup.Cleaner
 }
 
 func NewManager(outbound adapter.OutboundManager) *Manager {
@@ -112,6 +119,12 @@ func (m *Manager) SetConnectionObserver(observer ConnectionObserver) {
 	}
 }
 
+func (m *Manager) SetConnectionHistorySink(sink ConnectionHistorySink) {
+	m.historySinkAccess.Lock()
+	m.historySink = sink
+	m.historySinkAccess.Unlock()
+}
+
 func (m *Manager) SetClosedConnectionsLimit(limit int) {
 	if limit < 0 {
 		limit = 0
@@ -141,6 +154,11 @@ func (m *Manager) join(tracker Tracker) {
 	if observer != nil {
 		observer.observer.ConnectionOpened(*metadata)
 	}
+	m.historySinkAccess.RLock()
+	if m.historySink != nil {
+		m.historySink.ConnectionOpened(*metadata)
+	}
+	m.historySinkAccess.RUnlock()
 	m.eventSubscriber.Emit(ConnectionEvent{
 		Type:     ConnectionEventNew,
 		ID:       metadata.ID,
@@ -175,6 +193,11 @@ func (m *Manager) leave(tracker Tracker) {
 	if observer != nil {
 		observer.observer.ConnectionClosed(metadataCopy)
 	}
+	m.historySinkAccess.RLock()
+	if m.historySink != nil {
+		m.historySink.ConnectionClosed(metadataCopy)
+	}
+	m.historySinkAccess.RUnlock()
 	m.eventSubscriber.Emit(ConnectionEvent{
 		Type:     ConnectionEventClosed,
 		ID:       metadata.ID,
