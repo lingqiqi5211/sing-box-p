@@ -19,6 +19,7 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/experimental"
 	"github.com/sagernet/sing-box/experimental/clashmode"
+	"github.com/sagernet/sing-box/experimental/connectionhistory"
 	"github.com/sagernet/sing-box/experimental/deprecated"
 	"github.com/sagernet/sing-box/experimental/observability"
 	"github.com/sagernet/sing-box/log"
@@ -53,6 +54,7 @@ type Server struct {
 	httpServer     *http.Server
 	trafficManager *trafficcontrol.Manager
 	observability  observability.Service
+	history        connectionhistory.Service
 	urlTestHistory *urltest.HistoryStorage
 	clashMode      *clashmode.Manager
 	logDebug       bool
@@ -102,6 +104,7 @@ func NewServer(ctx context.Context, logFactory log.ObservableFactory, options op
 		},
 		trafficManager:           trafficManager,
 		observability:            service.FromContext[observability.Service](ctx),
+		history:                  service.FromContext[connectionhistory.Service](ctx),
 		urlTestHistory:           urlTestHistory,
 		clashMode:                clashMode,
 		logDebug:                 logFactory.Level() >= log.LevelDebug,
@@ -144,6 +147,9 @@ func NewServer(ctx context.Context, logFactory log.ObservableFactory, options op
 		if s.observability != nil {
 			r.Mount("/observability/v1", s.observability.Handler())
 		}
+		if s.history != nil {
+			r.Mount("/history", connectionHistoryRouter(s.history))
+		}
 		r.Mount("/providers/proxies", proxyProviderRouter(s))
 		r.Mount("/providers/rules", ruleProviderRouter(s.router))
 		r.Mount("/script", scriptRouter())
@@ -167,6 +173,15 @@ func NewServer(ctx context.Context, logFactory log.ObservableFactory, options op
 			r.Get("/ui", http.RedirectHandler("/ui/", http.StatusMovedPermanently).ServeHTTP)
 			r.Handle("/ui/*", http.StripPrefix("/ui/", http.FileServer(Dir(s.externalUI))))
 		})
+	}
+	if s.history != nil && s.history.ExternalUI() != "" {
+		historyUI := s.history.ExternalUI()
+		_, err := filemanager.ReadDir(ctx, historyUI)
+		if err != nil {
+			return nil, E.Cause(err, "read connection history UI directory")
+		}
+		chiRouter.Get("/history/ui", http.RedirectHandler("/history/ui/", http.StatusMovedPermanently).ServeHTTP)
+		chiRouter.Handle("/history/ui/*", http.StripPrefix("/history/ui/", http.FileServer(Dir(historyUI))))
 	}
 	return s, nil
 }
