@@ -29,6 +29,7 @@ import (
 	"github.com/sagernet/sing-box/experimental"
 	"github.com/sagernet/sing-box/experimental/cachefile"
 	"github.com/sagernet/sing-box/experimental/clashmode"
+	"github.com/sagernet/sing-box/experimental/connectionhistory"
 	"github.com/sagernet/sing-box/experimental/deprecated"
 	"github.com/sagernet/sing-box/experimental/observability"
 	"github.com/sagernet/sing-box/log"
@@ -181,6 +182,7 @@ func New(options Options) (*Box, error) {
 		needV2RayAPI = true
 	}
 	needObservability := experimentalOptions.Observability != nil && experimentalOptions.Observability.Enabled
+	needConnectionHistory := experimentalOptions.ConnectionHistory != nil && experimentalOptions.ConnectionHistory.Enabled
 	needAPIService := common.Any(options.Services, func(it option.Service) bool {
 		return it.Type == C.TypeAPI
 	})
@@ -266,7 +268,7 @@ func New(options Options) (*Box, error) {
 		return nil, E.Cause(err, "initialize router")
 	}
 	var trafficManager *trafficcontrol.Manager
-	if needClashAPI || needAPIService || needObservability || options.PlatformLogWriter != nil {
+	if needClashAPI || needAPIService || needObservability || needConnectionHistory || options.PlatformLogWriter != nil {
 		trafficManager = trafficcontrol.NewManager(outboundManager)
 		service.MustRegisterPtr(ctx, trafficManager)
 		router.AppendTracker(trafficManager)
@@ -485,6 +487,19 @@ func New(options Options) (*Box, error) {
 		}
 		service.MustRegister[observability.Service](ctx, observabilityService)
 		internalServices = append(internalServices, observabilityService)
+	}
+	if needConnectionHistory {
+		historyService, historyErr := connectionhistory.New(
+			ctx,
+			logFactory.NewLogger("connection-history"),
+			trafficManager,
+			*experimentalOptions.ConnectionHistory,
+		)
+		if historyErr != nil {
+			return nil, E.Cause(historyErr, "create connection history")
+		}
+		service.MustRegister[connectionhistory.Service](ctx, historyService)
+		internalServices = append(internalServices, historyService)
 	}
 	if needClashAPI {
 		clashServer, err := experimental.NewClashServer(ctx, logFactory.(log.ObservableFactory), common.PtrValueOrDefault(experimentalOptions.ClashAPI))
