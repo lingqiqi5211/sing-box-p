@@ -6,12 +6,20 @@ import (
 )
 
 type ExperimentalOptions struct {
-	CacheFile           *CacheFileOptions     `json:"cache_file,omitempty"`
-	ClashAPI            *ClashAPIOptions      `json:"clash_api,omitempty"`
-	Observability       *ObservabilityOptions `json:"observability,omitempty"`
-	V2RayAPI            *V2RayAPIOptions      `json:"v2ray_api,omitempty"`
-	Debug               *DebugOptions         `json:"debug,omitempty"`
-	URLTestUnifiedDelay bool                  `json:"urltest_unified_delay,omitempty"`
+	CacheFile           *CacheFileOptions         `json:"cache_file,omitempty"`
+	ClashAPI            *ClashAPIOptions          `json:"clash_api,omitempty"`
+	ConnectionHistory   *ConnectionHistoryOptions `json:"connection_history,omitempty"`
+	Observability       *ObservabilityOptions     `json:"observability,omitempty"`
+	V2RayAPI            *V2RayAPIOptions          `json:"v2ray_api,omitempty"`
+	Debug               *DebugOptions             `json:"debug,omitempty"`
+	URLTestUnifiedDelay bool                      `json:"urltest_unified_delay,omitempty"`
+}
+
+type ConnectionHistoryOptions struct {
+	Enabled    bool               `json:"enabled,omitempty"`
+	Path       string             `json:"path,omitempty"`
+	ExternalUI string             `json:"external_ui,omitempty"`
+	Retention  badoption.Duration `json:"retention,omitempty"`
 }
 
 type ObservabilityOptions struct {
