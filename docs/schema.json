@@ -721,6 +721,24 @@
       },
       "additionalProperties": false
     },
+    "ConnectionHistoryOptions": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "external_ui": {
+          "type": "string"
+        },
+        "retention": {
+          "$ref": "#/$defs/Duration"
+        }
+      },
+      "additionalProperties": false
+    },
     "DERPMeshOptions": {
       "type": "object",
       "properties": {
@@ -793,6 +811,9 @@
         },
         "tcp_keep_alive_interval": {
           "$ref": "#/$defs/Duration"
+        },
+        "tcp_keep_alive_count": {
+          "type": "integer"
         },
         "udp_fragment": {
           "type": "boolean"
@@ -1976,6 +1997,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "udp_fragment": {
               "type": "boolean"
             },
@@ -2158,6 +2182,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "udp_fragment": {
               "type": "boolean"
             },
@@ -2336,6 +2363,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "udp_fragment": {
               "type": "boolean"
             },
@@ -2470,6 +2500,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "udp_fragment": {
               "type": "boolean"
             },
@@ -2599,6 +2632,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -2791,6 +2827,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "udp_fragment": {
               "type": "boolean"
             },
@@ -2961,6 +3000,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "udp_fragment": {
               "type": "boolean"
             },
@@ -3082,6 +3124,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -3207,6 +3252,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -3364,6 +3412,9 @@
         "tcp_keep_alive_interval": {
           "$ref": "#/$defs/Duration"
         },
+        "tcp_keep_alive_count": {
+          "type": "integer"
+        },
         "udp_fragment": {
           "type": "boolean"
         },
@@ -3466,6 +3517,224 @@
       "type": "string",
       "pattern": "^[-+]?(((\\d+(\\.\\d*)?|\\.\\d+)(ns|us|µs|μs|ms|s|m|h|d))+|0)$"
     },
+    "EBPFLocalOptions": {
+      "type": "object",
+      "properties": {
+        "cgroup_path": {
+          "type": "string"
+        },
+        "ipv6_mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "always",
+            "off"
+          ]
+        },
+        "include_uid": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          ]
+        },
+        "include_uid_range": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "exclude_uid": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          ]
+        },
+        "exclude_uid_range": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "include_android_user": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          ]
+        },
+        "include_package": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "exclude_package": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "state_capacity": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1048576
+        }
+      },
+      "additionalProperties": false
+    },
+    "EBPFSharedAdvancedOptions": {
+      "type": "object",
+      "properties": {
+        "tc_priority": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      },
+      "additionalProperties": false
+    },
+    "EBPFSharedOptions": {
+      "type": "object",
+      "properties": {
+        "interface": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "ipv6_mode": {
+          "type": "string",
+          "enum": [
+            "always",
+            "off"
+          ]
+        },
+        "include_source_cidr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "exclude_source_cidr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "include_mac_address": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "exclude_mac_address": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "state_capacity": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1048576
+        },
+        "advanced": {
+          "$ref": "#/$defs/EBPFSharedAdvancedOptions"
+        }
+      },
+      "additionalProperties": false
+    },
     "Endpoint": {
       "oneOf": [
         {
@@ -3532,6 +3801,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -3809,6 +4081,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -4219,6 +4494,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "tcp_fast_open": {
               "type": "boolean"
             },
@@ -4497,6 +4775,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -4789,6 +5070,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "udp_fragment": {
               "type": "boolean"
             },
@@ -4848,6 +5132,9 @@
         },
         "clash_api": {
           "$ref": "#/$defs/ClashAPIOptions"
+        },
+        "connection_history": {
+          "$ref": "#/$defs/ConnectionHistoryOptions"
         },
         "v2ray_api": {
           "$ref": "#/$defs/V2RayAPIOptions"
@@ -4947,6 +5234,9 @@
         },
         "tcp_keep_alive_interval": {
           "$ref": "#/$defs/Duration"
+        },
+        "tcp_keep_alive_count": {
+          "type": "integer"
         },
         "udp_fragment": {
           "type": "boolean"
@@ -5120,6 +5410,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -5837,6 +6130,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "tcp_fast_open": {
               "type": "boolean"
             },
@@ -5989,6 +6285,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "tcp_fast_open": {
               "type": "boolean"
             },
@@ -6044,6 +6343,85 @@
           "type": "object",
           "properties": {
             "type": {
+              "const": "ebpf"
+            },
+            "tag": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "local",
+                "shared",
+                "hybrid"
+              ]
+            },
+            "network": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "tcp",
+                    "udp"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "tcp",
+                      "udp"
+                    ]
+                  }
+                }
+              ]
+            },
+            "udp_timeout": {
+              "$ref": "#/$defs/UDPTimeout"
+            },
+            "dns_mode": {
+              "type": "string",
+              "enum": [
+                "hijack",
+                "respect_bypass",
+                "off"
+              ]
+            },
+            "bypass_private_address": {
+              "type": "boolean"
+            },
+            "bypass_rule_set": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "x-tag-reference": "rule_set"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "x-tag-reference": "rule_set"
+                  }
+                }
+              ]
+            },
+            "local": {
+              "$ref": "#/$defs/EBPFLocalOptions"
+            },
+            "shared": {
+              "$ref": "#/$defs/EBPFSharedOptions"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
               "const": "http"
             },
             "tag": {
@@ -6087,6 +6465,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "tcp_fast_open": {
               "type": "boolean"
@@ -6172,6 +6553,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "tcp_fast_open": {
               "type": "boolean"
@@ -6319,6 +6703,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "tcp_fast_open": {
               "type": "boolean"
@@ -6564,6 +6951,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "tcp_fast_open": {
               "type": "boolean"
             },
@@ -6648,6 +7038,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "tcp_fast_open": {
               "type": "boolean"
@@ -6760,6 +7153,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "tcp_fast_open": {
               "type": "boolean"
             },
@@ -6829,6 +7225,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "tcp_fast_open": {
               "type": "boolean"
@@ -6966,6 +7365,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "tcp_fast_open": {
               "type": "boolean"
             },
@@ -7079,6 +7481,9 @@
                 "tcp_keep_alive_interval": {
                   "$ref": "#/$defs/Duration"
                 },
+                "tcp_keep_alive_count": {
+                  "type": "integer"
+                },
                 "tcp_fast_open": {
                   "type": "boolean"
                 },
@@ -7170,6 +7575,9 @@
                 "tcp_keep_alive_interval": {
                   "$ref": "#/$defs/Duration"
                 },
+                "tcp_keep_alive_count": {
+                  "type": "integer"
+                },
                 "tcp_fast_open": {
                   "type": "boolean"
                 },
@@ -7260,6 +7668,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "tcp_fast_open": {
               "type": "boolean"
             },
@@ -7338,6 +7749,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "tcp_fast_open": {
               "type": "boolean"
@@ -7453,6 +7867,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "tcp_fast_open": {
               "type": "boolean"
             },
@@ -7546,6 +7963,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "tcp_fast_open": {
               "type": "boolean"
@@ -8067,6 +8487,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "tcp_fast_open": {
               "type": "boolean"
             },
@@ -8151,6 +8574,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "tcp_fast_open": {
               "type": "boolean"
@@ -8297,6 +8723,9 @@
         },
         "tcp_keep_alive_interval": {
           "$ref": "#/$defs/Duration"
+        },
+        "tcp_keep_alive_count": {
+          "type": "integer"
         },
         "udp_fragment": {
           "type": "boolean"
@@ -8722,6 +9151,9 @@
         },
         "tcp_keep_alive_interval": {
           "$ref": "#/$defs/Duration"
+        },
+        "tcp_keep_alive_count": {
+          "type": "integer"
         },
         "udp_fragment": {
           "type": "boolean"
@@ -10900,6 +11332,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "udp_fragment": {
               "type": "boolean"
             },
@@ -11088,6 +11523,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "udp_fragment": {
               "type": "boolean"
             },
@@ -11201,6 +11639,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -11338,6 +11779,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -11586,6 +12030,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -11911,6 +12358,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "udp_fragment": {
               "type": "boolean"
             },
@@ -12167,6 +12617,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "udp_fragment": {
               "type": "boolean"
             },
@@ -12370,6 +12823,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "udp_fragment": {
               "type": "boolean"
             },
@@ -12510,6 +12966,9 @@
                 },
                 "tcp_keep_alive_interval": {
                   "$ref": "#/$defs/Duration"
+                },
+                "tcp_keep_alive_count": {
+                  "type": "integer"
                 },
                 "udp_fragment": {
                   "type": "boolean"
@@ -12678,6 +13137,9 @@
                 "tcp_keep_alive_interval": {
                   "$ref": "#/$defs/Duration"
                 },
+                "tcp_keep_alive_count": {
+                  "type": "integer"
+                },
                 "udp_fragment": {
                   "type": "boolean"
                 },
@@ -12840,6 +13302,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -13025,6 +13490,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -13241,6 +13709,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "udp_fragment": {
               "type": "boolean"
             },
@@ -13372,6 +13843,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -13527,6 +14001,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -13799,6 +14276,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "udp_fragment": {
               "type": "boolean"
             },
@@ -13959,6 +14439,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -15877,6 +16360,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "udp_fragment": {
               "type": "boolean"
             },
@@ -16390,6 +16876,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "tcp_fast_open": {
               "type": "boolean"
             },
@@ -16521,6 +17010,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "tcp_fast_open": {
               "type": "boolean"
             },
@@ -16608,6 +17100,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "tcp_fast_open": {
               "type": "boolean"
@@ -16737,6 +17232,9 @@
                         },
                         "tcp_keep_alive_interval": {
                           "$ref": "#/$defs/Duration"
+                        },
+                        "tcp_keep_alive_count": {
+                          "type": "integer"
                         },
                         "udp_fragment": {
                           "type": "boolean"
@@ -16920,6 +17418,9 @@
                           "tcp_keep_alive_interval": {
                             "$ref": "#/$defs/Duration"
                           },
+                          "tcp_keep_alive_count": {
+                            "type": "integer"
+                          },
                           "udp_fragment": {
                             "type": "boolean"
                           },
@@ -17085,6 +17586,9 @@
                     "tcp_keep_alive_interval": {
                       "$ref": "#/$defs/Duration"
                     },
+                    "tcp_keep_alive_count": {
+                      "type": "integer"
+                    },
                     "tcp_fast_open": {
                       "type": "boolean"
                     },
@@ -17159,6 +17663,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "tcp_fast_open": {
               "type": "boolean"
@@ -17269,6 +17776,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "tcp_fast_open": {
               "type": "boolean"
@@ -17401,6 +17911,9 @@
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
             },
+            "tcp_keep_alive_count": {
+              "type": "integer"
+            },
             "tcp_fast_open": {
               "type": "boolean"
             },
@@ -17470,6 +17983,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "tcp_fast_open": {
               "type": "boolean"
@@ -17569,6 +18085,9 @@
             },
             "tcp_keep_alive_interval": {
               "$ref": "#/$defs/Duration"
+            },
+            "tcp_keep_alive_count": {
+              "type": "integer"
             },
             "udp_fragment": {
               "type": "boolean"
@@ -17690,6 +18209,9 @@
                 "tcp_keep_alive_interval": {
                   "$ref": "#/$defs/Duration"
                 },
+                "tcp_keep_alive_count": {
+                  "type": "integer"
+                },
                 "tcp_fast_open": {
                   "type": "boolean"
                 },
@@ -17768,6 +18290,9 @@
                 },
                 "tcp_keep_alive_interval": {
                   "$ref": "#/$defs/Duration"
+                },
+                "tcp_keep_alive_count": {
+                  "type": "integer"
                 },
                 "tcp_fast_open": {
                   "type": "boolean"
@@ -17862,6 +18387,9 @@
         },
         "tcp_keep_alive_interval": {
           "$ref": "#/$defs/Duration"
+        },
+        "tcp_keep_alive_count": {
+          "type": "integer"
         },
         "udp_fragment": {
           "type": "boolean"
