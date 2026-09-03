@@ -1,0 +1,280 @@
+name: Build SFA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev-next
+      - dev
+      - main
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      go-version: ${{ steps.go.outputs.version }}
+      sing-box-version: ${{ steps.sing-box.outputs.version }}
+      build-tools-version: ${{ steps.sdk.outputs.version }}
+      branch: ${{ steps.app_branch.outputs.branch }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Get Go version
+        id: go
+        run: |
+          # Pinned: Go 1.27 miscompiles the //go:linkname hacks in common/badtls
+          # and produces corrupted error values at runtime.
+          echo version=1.26.5 >> $GITHUB_OUTPUT
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+
+      - name: Get sing-box version
+        id: sing-box
+        run: |
+          echo "version=$(CGO_ENABLED=0 GOOS='linux' GOARCH='amd64' go run ./cmd/internal/read_tag)" >> $GITHUB_OUTPUT
+
+      - name: Get Build Tools Version
+        id: sdk
+        run: echo version=$(ls $ANDROID_HOME/build-tools | tail -n 1) >> $GITHUB_OUTPUT
+
+      - name: Set app branch
+        id: app_branch
+        run: echo "branch=main" >> $GITHUB_OUTPUT
+
+  build-libbox:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goarch: arm64
+            gomobile_target: android/arm64
+          - goarch: arm
+            gomobile_target: android/arm
+          - goarch: amd64
+            gomobile_target: android/amd64
+          - goarch: 386
+            gomobile_target: android/386
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ needs.prepare.outputs.go-version }}
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 21
+
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r29
+
+      - name: Install dependencies
+        run: make lib_install
+
+      - name: Build libbox per arch
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          VERSION: ${{ needs.prepare.outputs.sing-box-version }}
+          CGO_ENABLED: '1'
+          CGO_LDFLAGS: "-lc++"
+        run: |
+          export BPF_CLANG=${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang
+          make -C common/ebpf generate
+          TAGS=$(cat release/DEFAULT_BUILD_TAGS)
+          gomobile bind -v -target ${{ matrix.gomobile_target }} -trimpath -androidapi 21 -javapkg=io.nekohasekai -libname=box -tags ${TAGS} -ldflags "-s -buildid= -X github.com/sagernet/sing-box/constant.Version=${VERSION}-077 -X internal/godebug.defaultGODEBUG=multipathtcp=0 -checklinkname=0" -o libbox-${{ matrix.goarch }}.aar ./experimental/libbox
+
+      - name: Upload partial artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: libbox-${{ matrix.goarch }}
+          path: libbox-${{ matrix.goarch }}.aar
+
+  build-apk:
+    needs: [prepare, build-libbox]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout App Repo
+        uses: actions/checkout@v6
+        with:
+          path: sfa
+          repository: SagerNet/sing-box-for-android
+          ref: ${{ needs.prepare.outputs.branch }}
+          submodules: recursive
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 21
+
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r28
+
+      - name: Download all libbox artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: artifacts
+
+      - name: Merge AARs and Inject libc++
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          mkdir -p merged_aar
+
+          unzip -q artifacts/libbox-arm64/libbox-arm64.aar -d merged_aar
+          unzip -qo artifacts/libbox-arm/libbox-arm.aar "jni/*" -d merged_aar
+          unzip -qo artifacts/libbox-amd64/libbox-amd64.aar "jni/*" -d merged_aar
+          unzip -qo artifacts/libbox-386/libbox-386.aar "jni/*" -d merged_aar
+
+          NDK_SYSROOT="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib"
+
+          echo "Injecting libc++_shared.so..."
+          cp "$NDK_SYSROOT/aarch64-linux-android/libc++_shared.so" merged_aar/jni/arm64-v8a/
+          cp "$NDK_SYSROOT/arm-linux-androideabi/libc++_shared.so" merged_aar/jni/armeabi-v7a/
+          cp "$NDK_SYSROOT/x86_64-linux-android/libc++_shared.so" merged_aar/jni/x86_64/
+          cp "$NDK_SYSROOT/i686-linux-android/libc++_shared.so" merged_aar/jni/x86/
+
+          cd merged_aar
+          zip -r ../libbox.aar .
+          cd ..
+
+          mkdir -p sfa/app/libs/
+          cp libbox.aar sfa/app/libs/
+          cp libbox.aar sfa/app/libs/libbox-legacy.aar
+
+
+      - name: Build APK
+        env:
+          VERSION: ${{ needs.prepare.outputs.sing-box-version }}
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          cd sfa
+          echo "" >> gradle.properties
+          echo "org.gradle.jvmargs=-Xmx8192m -Dfile.encoding=UTF-8 -XX:+UseParallelGC" >> gradle.properties
+          echo "org.gradle.caching=false" >> gradle.properties
+          echo "org.gradle.parallel=true" >> gradle.properties
+          echo "VERSION_NAME=${VERSION}" > local.properties
+          echo "VERSION_CODE=$(date +%Y%m%d%H)" >> local.properties
+
+          sed -i '/signingConfig =/d' app/build.gradle.kts
+
+          chmod +x ./gradlew
+          ./gradlew assembleRelease
+
+      - name: Sign App
+        uses: PuerNya/sign-android-release@v2.0.4
+        env:
+          BUILD_TOOLS_VERSION: ${{ needs.prepare.outputs.build-tools-version }}
+        with:
+          alias: ${{ secrets.ALIAS }}
+          releaseDirectory: sfa/app/build/outputs/apk/other/release
+          signingKeyBase64: ${{ secrets.SIGN_KEY }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: sfa-apks
+          path: sfa/app/build/outputs/apk/other/release/*-signed.apk
+          compression-level: 9
+
+  upload-release:
+    permissions: write-all
+    if: ${{ github.ref_type == 'branch' && !startsWith(github.event_name, 'pull_request') }}
+    needs: [prepare, build-apk]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Get Version Tag
+        run: |
+          git fetch --tags --force origin
+          if [ "${{ github.ref_name }}" == "dev" ]; then
+            git remote add source https://github.com/SagerNet/sing-box.git
+            git fetch --tags --force source testing
+            TAG=$(git describe --tags --abbrev=0 HEAD)
+          elif [ "${{ github.ref_name }}" == "dev-next" ]; then
+            TAG=$(git describe --tags $(git rev-list --tags --max-count=1))
+          else
+            TAG=$(git describe --tags --abbrev=0)
+          fi
+          test -n "$TAG"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+        shell: bash
+
+      - uses: actions/download-artifact@v6
+        with:
+          name: sfa-apks
+          path: release_files
+
+      - name: Set Build Time
+        run: |
+          echo "BUILDTIME=$(TZ=Asia/Shanghai date)" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Tag Repo
+        uses: richardsimko/update-tag@v1
+        with:
+          tag_name: ${{ env.TAG }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - run: |
+          cat > release.txt << 'EOF'
+          Release created at  ${{ env.BUILDTIME }}
+          EOF
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v3
+        if: "${{ success() }}"
+        with:
+          tag_name: ${{ env.TAG }}
+          files: "release_files/*"
+          prerelease: false
+          generate_release_notes: false
+          body_path: release.txt
+          append_body: true
+
+      - name: Prepare Context
+        id: prepare-context
+        run: |
+          TAGS=$(cat release/DEFAULT_BUILD_TAGS)
+          {
+            echo 'CONTEXT<<EOF'
+            echo -e "SFA Build\n\n🏷️ Tags: ${TAGS}"
+            echo EOF
+          } >> $GITHUB_OUTPUT
+
+      - name: Send to Telegram
+        uses: xireiki/channel-post@v1
+        with:
+          chat_id: ${{ secrets.CHAT_ID }}
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          path: "release_files/*"
+          context: "${{ steps.prepare-context.outputs.CONTEXT }}"
+          parse_mode: HTML
+          large_file: true
+          api_id: ${{ secrets.API_ID }}
+          api_hash: ${{ secrets.API_HASH }}
+          method: sendFile
