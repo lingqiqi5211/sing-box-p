@@ -1,0 +1,295 @@
+name: Build Core
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      go-version: ${{ steps.go.outputs.go-version }}
+      tags: ${{ steps.set-var.outputs.TAGS }}
+      telegram-ready: ${{ steps.set-var.outputs.telegram-ready }}
+      sing-box-version: ${{ steps.set-var.outputs.sing-box-version }}
+      should-skip: ${{ steps.check-skip.outputs.should-skip }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check Skip Condition
+        id: check-skip
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if [[ "$COMMIT_MSG" == *"[skip]"* ]]; then
+            echo "should-skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Go
+        id: go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.5'
+          check-latest: true
+
+      - name: Setup Variables
+        id: set-var
+        run: |
+          TAGS=$(cat release/DEFAULT_BUILD_TAGS)
+          echo tags=$TAGS >> $GITHUB_OUTPUT
+          VERSION=$(CGO_ENABLED=0 GOOS="linux" GOARCH="amd64" go run ./cmd/internal/read_tag)
+          test -n "${VERSION}"
+          test "${VERSION}" != "unknown"
+          echo "sing-box-version=${VERSION}" >> "$GITHUB_OUTPUT"
+          if [[ -n $API_HASH && -n $API_ID && -n $BOT_TOKEN && -n $CHAT_ID ]]; then
+            echo telegram-ready=true >> $GITHUB_OUTPUT
+          fi
+        env:
+          API_HASH: ${{ secrets.API_HASH }}
+          API_ID: ${{ secrets.API_ID }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+
+  build:
+    runs-on: ${{ matrix.runner }}
+    needs: prepare
+    strategy:
+      matrix:
+        include:
+          - name: windows-amd64
+            goos: windows
+            goarch: amd64
+            goamd64: v1
+            runner: windows-latest
+            cgo: 0
+            go-version: '1.26.5'
+
+          - name: windows-arm64
+            goos: windows
+            goarch: arm64
+            runner: windows-latest
+            cgo: 0
+            go-version: '1.26.5'
+
+          - name: linux-amd64
+            goos: linux
+            goarch: amd64
+            goamd64: v1
+            runner: ubuntu-latest
+            cgo: 1
+            go-version: '1.26.5'
+
+          - name: darwin-amd64
+            goos: darwin
+            goarch: amd64
+            goamd64: v1
+            runner: macos-latest
+            cgo: 1
+            go-version: '1.26.5'
+
+          - name: android-arm64
+            goos: android
+            goarch: arm64
+            runner: ubuntu-latest
+            cgo: 1
+            go-version: '1.26.5'
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Prepare Naive (Linux)
+        if: matrix.goos == 'linux'
+        run: |
+          CRONET_GO_VERSION=$(cat .github/CRONET_GO_VERSION)
+          git init ~/cronet-go
+          git -C ~/cronet-go remote add origin https://github.com/sagernet/cronet-go.git
+          git -C ~/cronet-go fetch --depth=1 origin "$CRONET_GO_VERSION"
+          git -C ~/cronet-go checkout FETCH_HEAD
+          git -C ~/cronet-go submodule update --init --recursive --depth=1
+          cd ~/cronet-go
+          go run ./cmd/build-naive --target=linux/${{ matrix.goarch }} download-toolchain
+          go run ./cmd/build-naive --target=linux/${{ matrix.goarch }} env >> $GITHUB_ENV
+
+      - name: Setup NDK
+        if: matrix.goos == 'android' || matrix.goos == 'linux'
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r29
+
+      - name: Build
+        shell: bash
+        env:
+          CGO_ENABLED: ${{ matrix.cgo }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOAMD64: ${{ matrix.goamd64 }}
+          TAGS: ${{ needs.prepare.outputs.tags }}
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          VERSION: ${{ needs.prepare.outputs.sing-box-version }}
+        run: |
+          if [[ ${GOOS} == "android" ]]; then
+            export CC=${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang
+            export BPF_CLANG=${CC}
+          elif [[ ${GOOS} == "linux" ]]; then
+            export BPF_CLANG=${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang
+          fi
+
+          if [[ ${GOOS} == "android" || ${GOOS} == "linux" ]]; then
+            make -C common/ebpf generate
+          fi
+
+          OUTPUT_NAME="sing-box"
+          FINAL_TAGS=${TAGS}
+
+          if [[ ${GOOS} == "windows" ]]; then
+            OUTPUT_NAME="sing-box.exe"
+            FINAL_TAGS="${TAGS},with_purego"
+          fi
+
+          go build -v -trimpath -tags "${FINAL_TAGS}" -ldflags "-s -buildid= -X 'github.com/sagernet/sing-box/constant.Version=${VERSION}-077' -X internal/godebug.defaultGODEBUG=multipathtcp=0 -checklinkname=0" -o $OUTPUT_NAME ./cmd/sing-box
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: sing-box-${{ matrix.name }}
+          path: sing-box*
+
+  release:
+    permissions: write-all
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - prepare
+    if: "${{ needs.prepare.outputs['should-skip'] != 'true' }}"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Get artifacts
+        uses: actions/download-artifact@v6
+
+      - name: Rename Artifacts
+        run: |
+          # Artifacts are downloaded into subdirectories by default
+          mv sing-box-windows-arm64/sing-box.exe sing-box_windows_arm64.exe
+          mv sing-box-windows-amd64/sing-box.exe sing-box_windows_amd64.exe
+          mv sing-box-linux-amd64/sing-box sing-box_linux_amd64
+          mv sing-box-darwin-amd64/sing-box sing-box_darwin_amd64
+          mv sing-box-android-arm64/sing-box sing-box_android_arm64
+          # Remove empty directories
+          find . -maxdepth 1 -type d -empty -delete
+
+      - name: Get Version
+        run: |
+          git fetch --tags --force origin
+          if [ "${{ github.ref_name }}" == "dev" ]; then
+            git remote add source https://github.com/SagerNet/sing-box.git
+            git fetch --tags --force source testing
+            TAG=$(git describe --tags --abbrev=0 HEAD)
+          elif [ "${{ github.ref_name }}" == "dev-next" ]; then
+            TAG=$(git describe --tags $(git rev-list --tags --max-count=1))
+          else
+            TAG=$(git describe --tags --abbrev=0)
+          fi
+          test -n "$TAG"
+          PREVIOUS_TAG=
+          while IFS= read -r RELEASE_TAG; do
+            if [ "$RELEASE_TAG" != "$TAG" ]; then
+              PREVIOUS_TAG=$RELEASE_TAG
+              break
+            fi
+          done < <(
+            gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq '.[] | select(.draft == false) | .tag_name'
+          )
+          test -n "$PREVIOUS_TAG"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "PREVIOUS_TAG=$PREVIOUS_TAG" >> "$GITHUB_ENV"
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Set Env
+        run: |
+          echo "BUILDTIME=$(TZ=Asia/Shanghai date)" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Tag Repo
+        uses: richardsimko/update-tag@v1
+        with:
+          tag_name: ${{ env.TAG }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - run: |
+          cat > release.txt << 'EOF'
+          Release created at  ${{ env.BUILDTIME }}
+          EOF
+
+      - name: Upload Prerelease
+        uses: softprops/action-gh-release@v3
+        if: ${{ success() }}
+        with:
+          tag_name: ${{ env.TAG }}
+          files: |
+            sing-box_*
+          prerelease: true
+          generate_release_notes: true
+          previous_tag: ${{ env.PREVIOUS_TAG }}
+          body_path: release.txt
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v3
+        if: ${{ success() }}
+        with:
+          tag_name: ${{ env.TAG }}
+          files: |
+            sing-box_*
+          prerelease: false
+          generate_release_notes: true
+          previous_tag: ${{ env.PREVIOUS_TAG }}
+          body_path: release.txt
+
+      - name: Prepare Context
+        id: prepare-context
+        env:
+          SING_BOX_VERSION: ${{ needs.prepare.outputs.sing-box-version }}
+          GO_VERSION: ${{ needs.prepare.outputs.go-version }}
+          TAGS: ${{ needs.prepare.outputs.tags }}
+        run: |
+          {
+            echo 'CONTEXT<<EOF'
+            echo -e "sing-box v${SING_BOX_VERSION}\n\n🛠️ Built with Go v${GO_VERSION}\n\n🏷️ Tags: ${TAGS}\n\n✨ Commit:"
+            git log -n 8 --pretty=format:'%an/%cn- %s' | grep -E '(lingqiqi|yelnoo|lux5am|xchacha20-poly1305|PuerNya|reF1nd|0xffffharry|dyhkwong)' | sed 's/^[^ ]* //'
+            echo EOF
+          } >> $GITHUB_OUTPUT
+
+      - name: Send to Telegram
+        if: "${{ needs.prepare.outputs['telegram-ready'] == 'true' }}"
+        uses: xireiki/channel-post@v1
+        with:
+          chat_id: ${{ secrets.CHAT_ID }}
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          path: "sing-box_*"
+          context: "${{ steps.prepare-context.outputs.CONTEXT }}"
+          parse_mode: HTML
+          large_file: true
+          api_id: ${{ secrets.API_ID }}
+          api_hash: ${{ secrets.API_HASH }}
+          method: sendFile
