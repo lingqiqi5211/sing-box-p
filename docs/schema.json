@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sing-box.sagernet.org/schema.json",
+  "$id": "https://raw.githubusercontent.com/reF1nd/sing-box/reF1nd-testing/docs/schema.json",
   "type": "object",
   "properties": {
     "$schema": {
       "type": "string",
       "examples": [
-        "https://sing-box.sagernet.org/schema.json"
+        "https://raw.githubusercontent.com/reF1nd/sing-box/reF1nd-testing/docs/schema.json"
       ]
     },
     "log": {
@@ -867,6 +867,12 @@
         "reverse_mapping": {
           "type": "boolean"
         },
+        "default_reject_rcode": {
+          "$ref": "#/$defs/DNSRejectRCode"
+        },
+        "allow_resolver_discovery": {
+          "type": "boolean"
+        },
         "strategy": {
           "$ref": "#/$defs/DomainStrategy"
         },
@@ -1019,6 +1025,40 @@
         {
           "type": "string",
           "enum": [
+            "NOERROR",
+            "FORMERR",
+            "SERVFAIL",
+            "NXDOMAIN",
+            "NOTIMP",
+            "NOTIMPL",
+            "REFUSED",
+            "YXDOMAIN",
+            "YXRRSET",
+            "NXRRSET",
+            "NOTAUTH",
+            "NOTZONE",
+            "DSOTYPENI",
+            "BADSIG",
+            "BADKEY",
+            "BADTIME",
+            "BADMODE",
+            "BADNAME",
+            "BADALG",
+            "BADTRUNC",
+            "BADCOOKIE"
+          ]
+        }
+      ]
+    },
+    "DNSRejectRCode": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "",
             "NOERROR",
             "FORMERR",
             "SERVFAIL",
@@ -1816,13 +1856,15 @@
             "race": {
               "type": "boolean"
             },
+            "rcode": {
+              "$ref": "#/$defs/DNSRejectRCode"
+            },
             "method": {
               "type": "string",
               "enum": [
                 "",
                 "default",
-                "drop",
-                "reply"
+                "drop"
               ]
             },
             "no_drop": {
@@ -3392,6 +3434,17 @@
       },
       "additionalProperties": false
     },
+    "DomainMatchStrategy": {
+      "type": "string",
+      "enum": [
+        "",
+        "as_is",
+        "prefer_fqdn",
+        "prefer_sniffhost",
+        "fqdn_only",
+        "sniffhost_only"
+      ]
+    },
     "DomainResolver": {
       "anyOf": [
         {
@@ -4223,6 +4276,12 @@
               "type": "string",
               "x-tag-reference": "inbound"
             },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
+            },
             "system": {
               "type": "boolean"
             },
@@ -4597,6 +4656,9 @@
             "system_interface_name": {
               "type": "string"
             },
+            "system_interface_gso": {
+              "type": "boolean"
+            },
             "system_interface_mtu": {
               "type": "integer",
               "minimum": 0,
@@ -4652,6 +4714,9 @@
               "type": "string"
             },
             "system": {
+              "type": "boolean"
+            },
+            "gso": {
               "type": "boolean"
             },
             "name": {
@@ -5546,6 +5611,9 @@
                 }
               ]
             },
+            "domain_match_strategy": {
+              "$ref": "#/$defs/DomainMatchStrategy"
+            },
             "network_interface_address": {
               "type": "object",
               "propertyNames": {
@@ -5602,6 +5670,9 @@
               "items": {
                 "$ref": "#/$defs/HeadlessRule"
               }
+            },
+            "domain_match_strategy": {
+              "$ref": "#/$defs/DomainMatchStrategy"
             },
             "invert": {
               "type": "boolean"
@@ -5838,6 +5909,12 @@
               "type": "string",
               "x-tag-reference": "inbound"
             },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
+            },
             "tls": {
               "$ref": "#/$defs/InboundTLSOptions"
             },
@@ -5999,6 +6076,12 @@
               "type": "string",
               "x-tag-reference": "inbound"
             },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
+            },
             "network": {
               "anyOf": [
                 {
@@ -6098,6 +6181,12 @@
               "type": "string",
               "x-tag-reference": "inbound"
             },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
+            },
             "users": {
               "type": "array",
               "items": {
@@ -6182,6 +6271,12 @@
             "detour": {
               "type": "string",
               "x-tag-reference": "inbound"
+            },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
             },
             "up": {
               "anyOf": [
@@ -6329,6 +6424,12 @@
             "detour": {
               "type": "string",
               "x-tag-reference": "inbound"
+            },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
             },
             "up_mbps": {
               "type": "integer"
@@ -6574,6 +6675,12 @@
               "type": "string",
               "x-tag-reference": "inbound"
             },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
+            },
             "users": {
               "type": "array",
               "items": {
@@ -6658,6 +6765,12 @@
             "detour": {
               "type": "string",
               "x-tag-reference": "inbound"
+            },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
             },
             "users": {
               "type": "array",
@@ -6766,6 +6879,12 @@
             "detour": {
               "type": "string",
               "x-tag-reference": "inbound"
+            },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
             }
           },
           "required": [
@@ -6836,6 +6955,12 @@
             "detour": {
               "type": "string",
               "x-tag-reference": "inbound"
+            },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
             },
             "network": {
               "anyOf": [
@@ -6963,6 +7088,12 @@
               "type": "string",
               "x-tag-reference": "inbound"
             },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
+            },
             "version": {
               "type": "integer",
               "enum": [
@@ -7076,6 +7207,12 @@
                   "type": "string",
                   "x-tag-reference": "inbound"
                 },
+                "proxy_protocol": {
+                  "type": "boolean"
+                },
+                "proxy_protocol_accept_no_header": {
+                  "type": "boolean"
+                },
                 "psk": {
                   "type": "string"
                 },
@@ -7167,6 +7304,12 @@
                   "type": "string",
                   "x-tag-reference": "inbound"
                 },
+                "proxy_protocol": {
+                  "type": "boolean"
+                },
+                "proxy_protocol_accept_no_header": {
+                  "type": "boolean"
+                },
                 "psk": {
                   "type": "string"
                 },
@@ -7257,6 +7400,12 @@
               "type": "string",
               "x-tag-reference": "inbound"
             },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
+            },
             "users": {
               "type": "array",
               "items": {
@@ -7335,6 +7484,12 @@
             "detour": {
               "type": "string",
               "x-tag-reference": "inbound"
+            },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
             },
             "network": {
               "anyOf": [
@@ -7450,6 +7605,12 @@
               "type": "string",
               "x-tag-reference": "inbound"
             },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
+            },
             "users": {
               "type": "array",
               "items": {
@@ -7543,6 +7704,12 @@
             "detour": {
               "type": "string",
               "x-tag-reference": "inbound"
+            },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
             },
             "users": {
               "type": "array",
@@ -8076,6 +8243,12 @@
               "type": "string",
               "x-tag-reference": "inbound"
             },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
+            },
             "users": {
               "type": "array",
               "items": {
@@ -8160,6 +8333,12 @@
             "detour": {
               "type": "string",
               "x-tag-reference": "inbound"
+            },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
             },
             "users": {
               "type": "array",
@@ -9869,6 +10048,9 @@
             "rule_set_ip_cidr_match_source": {
               "type": "boolean"
             },
+            "domain_match_strategy": {
+              "$ref": "#/$defs/DomainMatchStrategy"
+            },
             "invert": {
               "type": "boolean"
             }
@@ -9893,6 +10075,9 @@
               "items": {
                 "$ref": "#/$defs/NestedRule"
               }
+            },
+            "domain_match_strategy": {
+              "$ref": "#/$defs/DomainMatchStrategy"
             },
             "invert": {
               "type": "boolean"
@@ -11084,6 +11269,19 @@
             },
             "fallback_delay": {
               "$ref": "#/$defs/Duration"
+            },
+            "direct_domain_strategy": {
+              "$ref": "#/$defs/DomainStrategy"
+            },
+            "proxy_protocol": {
+              "type": "integer",
+              "enum": [
+                0,
+                1,
+                2
+              ],
+              "minimum": 0,
+              "maximum": 255
             }
           },
           "required": [
@@ -14361,6 +14559,15 @@
         },
         "default_http_client": {
           "type": "string"
+        },
+        "default_domain_match_strategy": {
+          "type": "string",
+          "enum": [
+            "",
+            "as_is",
+            "prefer_fqdn",
+            "prefer_sniffhost"
+          ]
         }
       },
       "additionalProperties": false
@@ -14877,6 +15084,9 @@
                 "rule_set_ip_cidr_match_source": {
                   "type": "boolean"
                 },
+                "domain_match_strategy": {
+                  "$ref": "#/$defs/DomainMatchStrategy"
+                },
                 "invert": {
                   "type": "boolean"
                 }
@@ -14909,6 +15119,9 @@
                   "items": {
                     "$ref": "#/$defs/NestedRule"
                   }
+                },
+                "domain_match_strategy": {
+                  "$ref": "#/$defs/DomainMatchStrategy"
                 },
                 "invert": {
                   "type": "boolean"
@@ -15318,6 +15531,17 @@
           "type": "object",
           "properties": {
             "action": {
+              "const": "sniff-override-destination"
+            }
+          },
+          "required": [
+            "action"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
               "const": "resolve"
             },
             "server": {
@@ -15554,6 +15778,12 @@
               "type": "string",
               "x-tag-reference": "inbound"
             },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
+            },
             "secret": {
               "type": "string"
             },
@@ -15685,6 +15915,12 @@
               "type": "string",
               "x-tag-reference": "outbound"
             },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
+            },
             "tls": {
               "$ref": "#/$defs/InboundTLSOptions"
             },
@@ -15772,6 +16008,12 @@
             "detour": {
               "type": "string",
               "x-tag-reference": "inbound"
+            },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
             },
             "tls": {
               "$ref": "#/$defs/InboundTLSOptions"
@@ -16248,6 +16490,12 @@
                     "detour": {
                       "type": "string",
                       "x-tag-reference": "inbound"
+                    },
+                    "proxy_protocol": {
+                      "type": "boolean"
+                    },
+                    "proxy_protocol_accept_no_header": {
+                      "type": "boolean"
                     }
                   },
                   "additionalProperties": false
@@ -16323,6 +16571,12 @@
             "detour": {
               "type": "string",
               "x-tag-reference": "inbound"
+            },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
             },
             "tls": {
               "$ref": "#/$defs/InboundTLSOptions"
@@ -16433,6 +16687,12 @@
             "detour": {
               "type": "string",
               "x-tag-reference": "outbound"
+            },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
             },
             "tls": {
               "$ref": "#/$defs/InboundTLSOptions"
@@ -16564,6 +16824,12 @@
             "detour": {
               "type": "string",
               "x-tag-reference": "inbound"
+            },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
             }
           },
           "required": [
@@ -16634,6 +16900,12 @@
             "detour": {
               "type": "string",
               "x-tag-reference": "inbound"
+            },
+            "proxy_protocol": {
+              "type": "boolean"
+            },
+            "proxy_protocol_accept_no_header": {
+              "type": "boolean"
             },
             "servers": {
               "type": "object",
@@ -16854,6 +17126,12 @@
                   "type": "string",
                   "x-tag-reference": "inbound"
                 },
+                "proxy_protocol": {
+                  "type": "boolean"
+                },
+                "proxy_protocol_accept_no_header": {
+                  "type": "boolean"
+                },
                 "devices": {
                   "type": "array",
                   "items": {
@@ -16932,6 +17210,12 @@
                 "detour": {
                   "type": "string",
                   "x-tag-reference": "inbound"
+                },
+                "proxy_protocol": {
+                  "type": "boolean"
+                },
+                "proxy_protocol_accept_no_header": {
+                  "type": "boolean"
                 }
               },
               "required": [
