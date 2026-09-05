@@ -82,6 +82,10 @@ require (
 	howett.net/plist v1.0.1
 )
 
+replace (
+	github.com/sagernet/sing-anytls => github.com/reF1nd/sing-anytls v0.0.0-20261005110320-ca02db16051a
+)
+
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	filippo.io/hpke v0.4.0 // indirect
