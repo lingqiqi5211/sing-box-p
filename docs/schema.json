@@ -846,6 +846,9 @@
         "reverse_mapping": {
           "type": "boolean"
         },
+        "allow_resolver_discovery": {
+          "type": "boolean"
+        },
         "strategy": {
           "$ref": "#/$defs/DomainStrategy"
         },
