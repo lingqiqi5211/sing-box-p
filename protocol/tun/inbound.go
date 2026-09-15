@@ -278,6 +278,8 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 		inbound.usePlatformAutoRedirect = platformInterface != nil && platformInterface.UsePlatformAutoRedirect()
 		inbound.disableNFTables = parseErr == nil && disableNFTables
 		inbound.tunOptions.AutoRedirectMarkMode = true
+		inbound.platformOptions.AndroidVPNRouteBypass = C.IsAndroid && inbound.usePlatformAutoRedirect &&
+			(len(inbound.routeRuleSet) > 0 || len(inbound.routeExcludeRuleSet) > 0)
 		inbound.dnsHijackByPort = inbound.tunOptions.DNSModeOrDefault() == tun.DNSModeHijack
 		if !inbound.usePlatformAutoRedirect && options.NetNs == "" {
 			err = networkManager.RegisterAutoRedirectOutputMark(inbound.tunOptions.AutoRedirectOutputMarkOrDefault())
