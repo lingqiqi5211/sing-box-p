@@ -50,8 +50,18 @@ func (c *STDClientConfig) SetServerName(serverName string) {
 		if c.disableSNI {
 			c.config.ServerName = ""
 		}
-		c.config.VerifyConnection = func(state tls.ConnectionState) error {
-			return VerifyCertificatePinSHA256(c.certificatePinSHA256, c.verificationServerName(), c.config.Time, state.PeerCertificates)
+		// VerifyPeerCertificate rather than VerifyConnection: QUIC ChromeParrot
+		// converts this config to uTLS, which rejects VerifyConnection.
+		c.config.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+			certificates := make([]*x509.Certificate, 0, len(rawCerts))
+			for _, rawCert := range rawCerts {
+				certificate, err := x509.ParseCertificate(rawCert)
+				if err != nil {
+					return E.Cause(err, "parse peer certificate")
+				}
+				certificates = append(certificates, certificate)
+			}
+			return VerifyCertificatePinSHA256(c.certificatePinSHA256, c.verificationServerName(), c.config.Time, certificates)
 		}
 		return
 	}
