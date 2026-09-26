@@ -2,8 +2,10 @@ package tls
 
 import (
 	"context"
+	"crypto/sha256"
 	stdtls "crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
 	"net"
 	"testing"
@@ -95,4 +97,33 @@ func TestSTDClientCertificateServerNameWithIPServerName(t *testing.T) {
 	require.NoError(t, clientTLS.Handshake())
 	require.NoError(t, <-serverResult)
 	require.Empty(t, serverTLS.ConnectionState().ServerName)
+}
+
+func TestSTDClientCertificatePinUsesVerifyPeerCertificate(t *testing.T) {
+	_, certificatePEM, err := GenerateCertificate(nil, nil, time.Now, "pin.example", time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	certificateBlock, _ := pem.Decode(certificatePEM)
+	require.NotNil(t, certificateBlock)
+	_, otherPEM, err := GenerateCertificate(nil, nil, time.Now, "other.example", time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	otherBlock, _ := pem.Decode(otherPEM)
+	require.NotNil(t, otherBlock)
+	pin := sha256.Sum256(certificateBlock.Bytes)
+
+	config, err := NewSTDClient(context.Background(), logger.NOP(), "", option.OutboundTLSOptions{
+		Enabled:              true,
+		ServerName:           "pin.example",
+		CertificatePinSHA256: hex.EncodeToString(pin[:]),
+	})
+	require.NoError(t, err)
+	for _, config := range []Config{config, config.Clone()} {
+		stdConfig, err := config.STDConfig()
+		require.NoError(t, err)
+		// QUIC ChromeParrot rejects configs with VerifyConnection set.
+		require.Nil(t, stdConfig.VerifyConnection)
+		require.NotNil(t, stdConfig.VerifyPeerCertificate)
+		require.NoError(t, stdConfig.VerifyPeerCertificate([][]byte{certificateBlock.Bytes}, nil))
+		require.Error(t, stdConfig.VerifyPeerCertificate([][]byte{otherBlock.Bytes}, nil))
+		require.Error(t, stdConfig.VerifyPeerCertificate([][]byte{[]byte("not a certificate")}, nil))
+	}
 }
