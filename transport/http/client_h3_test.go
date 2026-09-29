@@ -74,6 +74,8 @@ func TestHTTP3TunnelFailureFallback(t *testing.T) {
 	} {
 		t.Run(testCase.mode+"/"+string(testCase.algorithm), func(t *testing.T) {
 			mode := testCase.mode
+	for _, mode := range []string{"before_response", "established", "authentication", "certificate"} {
+		t.Run(mode, func(t *testing.T) {
 			certificateServer := httptest.NewTLSServer(nil)
 			tlsConfig := certificateServer.TLS.Clone()
 			certificateServer.Close()
@@ -120,6 +122,7 @@ func TestHTTP3TunnelFailureFallback(t *testing.T) {
 				option.ServerOptions{Server: address.AddrString(), ServerPort: address.Port},
 				option.OutboundTLSOptions{Enabled: true, Insecure: mode != "certificate"},
 				ClientOptions{Version: 3, H3CongestionControl: testCase.algorithm})
+				ClientOptions{Version: 3})
 			require.NoError(t, err)
 			t.Cleanup(func() { client.Close() })
 			tcp := &fallbackTestDialer{}
