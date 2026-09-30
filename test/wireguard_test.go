@@ -23,8 +23,13 @@ import (
 )
 
 func TestWireGuardEndpointDataPlane(t *testing.T) {
-	for _, system := range []bool{false, true} {
-		t.Run(fmt.Sprintf("system=%v", system), func(test *testing.T) {
+	for _, testCase := range []struct {
+		system bool
+		serverTCP, clientTCP option.TCPCongestionControl
+	}{{false, "", ""}, {true, "", ""}, {false, "bbr", "bbr"}, {false, "cubic", "reno"}, {true, "bbr", ""}} {
+		system := testCase.system
+		name := fmt.Sprintf("system=%v/tcp_congestion=%s,%s", system, testCase.serverTCP, testCase.clientTCP)
+		t.Run(name, func(test *testing.T) {
 			serverKey, err := ecdh.X25519().GenerateKey(rand.Reader)
 			require.NoError(test, err)
 			clientKey, err := ecdh.X25519().GenerateKey(rand.Reader)
@@ -41,7 +46,7 @@ func TestWireGuardEndpointDataPlane(t *testing.T) {
 						Type: C.TypeWireGuard,
 						Tag:  "server",
 						Options: &option.WireGuardEndpointOptions{
-							MTU: 1280, Address: serverAddresses, Workers: 2,
+							MTU: 1280, Address: serverAddresses, Workers: 2, TCPCongestionControl: testCase.serverTCP,
 							PrivateKey: base64.StdEncoding.EncodeToString(serverKey.Bytes()),
 							ListenPort: serverPort,
 							Peers: []option.WireGuardPeer{{
@@ -54,7 +59,7 @@ func TestWireGuardEndpointDataPlane(t *testing.T) {
 						Type: C.TypeWireGuard,
 						Tag:  "client",
 						Options: &option.WireGuardEndpointOptions{
-							System: system, MTU: 1280, Address: clientAddresses, Workers: 2,
+							System: system, MTU: 1280, Address: clientAddresses, Workers: 2, TCPCongestionControl: testCase.clientTCP,
 							PrivateKey: base64.StdEncoding.EncodeToString(clientKey.Bytes()),
 							Peers: []option.WireGuardPeer{{
 								Address: "127.0.0.1", Port: serverPort,

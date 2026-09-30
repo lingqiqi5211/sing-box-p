@@ -131,6 +131,9 @@ type Endpoint struct {
 }
 
 func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.TailscaleEndpointOptions) (adapter.Endpoint, error) {
+	if err := options.TCPCongestionControl.Validate(); err != nil {
+		return nil, err
+	}
 	stateDirectory := options.StateDirectory
 	if stateDirectory == "" {
 		stateDirectory = "tailscale"
@@ -201,12 +204,13 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 			UserLogf: func(format string, args ...any) {
 				logger.Debug(fmt.Sprintf(format, args...))
 			},
-			Ephemeral:     options.Ephemeral,
-			AuthKey:       options.AuthKey,
-			ControlURL:    options.ControlURL,
-			Port:          options.ListenPort,
-			AdvertiseTags: options.AdvertiseTags,
-			Dialer:        &endpointDialer{Dialer: outboundDialer, logger: logger},
+			Ephemeral:                    options.Ephemeral,
+			AuthKey:                      options.AuthKey,
+			ControlURL:                   options.ControlURL,
+			Port:                         options.ListenPort,
+			AdvertiseTags:                options.AdvertiseTags,
+			Dialer:                       &endpointDialer{Dialer: outboundDialer, logger: logger},
+			NetstackTCPCongestionControl: string(options.TCPCongestionControl),
 			LookupHook: func(ctx context.Context, host string) ([]netip.Addr, error) {
 				return dnsRouter.Lookup(ctx, host, dialerQueryOptions)
 			},

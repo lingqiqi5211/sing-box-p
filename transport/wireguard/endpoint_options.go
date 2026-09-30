@@ -13,15 +13,16 @@ import (
 )
 
 type EndpointOptions struct {
-	Context      context.Context
-	Logger       logger.ContextLogger
-	System       bool
-	Handler      tun.Handler
-	UDPTimeout   time.Duration
-	ICMPTimeout  time.Duration
-	UDPMapping   tun.NATMapping
-	UDPFiltering tun.NATFiltering
-	UDPNATMax    uint32
+	TCPCongestionControl string
+	Context              context.Context
+	Logger               logger.ContextLogger
+	System               bool
+	Handler              tun.Handler
+	UDPTimeout           time.Duration
+	ICMPTimeout          time.Duration
+	UDPMapping           tun.NATMapping
+	UDPFiltering         tun.NATFiltering
+	UDPNATMax            uint32
 
 	InterfaceFinder   control.InterfaceFinder
 	EgressPoolOptions tun.UDPEgressPoolOptions
