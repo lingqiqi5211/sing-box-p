@@ -207,14 +207,10 @@ func (c *http3ClientImpl) OpenTunnel(ctx context.Context, request tunnelRequest)
 	if err != nil {
 		return nil, err
 	}
-	return &http3RequestDatagramStream{stream: stream, datagramsEnabled: clientConn.Settings().EnableDatagrams}, nil
 	return &http3RequestDatagramStream{
 		stream:             stream,
 		datagramsEnabled:   clientConn.Settings().EnableDatagrams,
 		bypassIPCongestion: c.congestionControl == option.H3CongestionNone && request.protocol == "connect-ip",
-	return &http3RequestDatagramStream{
-		stream:           stream,
-		datagramsEnabled: clientConn.Settings().EnableDatagrams,
 	}, nil
 }
 
@@ -314,13 +310,10 @@ func (c *http3StreamConn) NeedAdditionalReadDeadline() bool {
 }
 
 type http3RequestDatagramStream struct {
-	stream           *http3.RequestStream
-	datagramsEnabled bool
 	stream             *http3.RequestStream
 	datagramsEnabled   bool
 	bypassIPCongestion bool
 	closed             atomic.Bool
-	closed           atomic.Bool
 }
 
 func (s *http3RequestDatagramStream) Read(p []byte) (int, error) {

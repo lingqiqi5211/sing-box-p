@@ -80,9 +80,6 @@ func (l *Listener) ListenTCP() (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	if l.listenOptions.ProxyProtocol {
-		tcpListener = &proxyproto.Listener{Listener: tcpListener, AcceptNoHeader: l.listenOptions.ProxyProtocolAcceptNoHeader}
-	}
 	if !l.disableLog {
 		l.logger.Info("tcp server started at ", tcpListener.Addr())
 	}

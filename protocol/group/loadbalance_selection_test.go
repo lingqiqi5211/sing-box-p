@@ -18,7 +18,7 @@ func TestLoadBalanceConnectionSelectionReceivesMetadata(t *testing.T) {
 	leaf := &preMatchTestOutbound{tag: "leaf"}
 	metadata := &adapter.InboundContext{
 		Network: N.NetworkUDP, Source: M.ParseSocksaddr("192.0.2.1:1234"),
-		Destination: M.ParseSocksaddr("www.example.com:443"), SniffHost: "example.com",
+		Destination: M.ParseSocksaddr("www.example.com:443"),
 	}
 	calls := 0
 	balance := &LoadBalance{group: &LoadBalanceGroup{strategyFn: func(received *adapter.InboundContext, touch bool, matcher outboundMatcher) adapter.Outbound {

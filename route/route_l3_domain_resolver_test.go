@@ -6,13 +6,10 @@ import (
 	"net"
 	"net/netip"
 	"testing"
-	"time"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/interrupt"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
-	R "github.com/sagernet/sing-box/route/rule"
 	tun "github.com/sagernet/sing-tun"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
@@ -126,94 +123,6 @@ func TestPreMatchFlowResolvesUDPFakeIPWithSelectedOutbound(t *testing.T) {
 	require.Equal(t, 1, dnsRouter.lookupCount)
 }
 
-func TestPreMatchFlowResolvesSniffOverrideDestination(t *testing.T) {
-	selectedOutbound := &testResolvingFlowOutbound{
-		testFlowOutbound: &testFlowOutbound{outboundType: "wireguard", tag: "wg"},
-		queryOptions:     adapter.DNSQueryOptions{Strategy: C.DomainStrategyIPv4Only},
-	}
-	dnsRouter := &testL3DNSRouter{addresses: []netip.Addr{netip.MustParseAddr("203.0.113.1")}}
-	router := &Router{
-		ctx:          context.Background(),
-		logger:       log.NewNOPFactory().NewLogger("router"),
-		outbound:     &testL3OutboundManager{defaultOutbound: selectedOutbound},
-		dns:          dnsRouter,
-		dnsTransport: new(testL3DNSTransportManager),
-		rules: []adapter.Rule{
-			&testL3Rule{action: new(R.RuleActionSniffOverrideDestination)},
-		},
-	}
-	originalDestination := M.ParseSocksaddr("192.0.2.2:443")
-	metadata := adapter.InboundContext{
-		Network:     N.NetworkUDP,
-		Source:      M.ParseSocksaddr("192.0.2.1:1234"),
-		Destination: originalDestination,
-		SniffHost:   "example.com",
-	}
-
-	result := router.PreMatch(metadata, nil)
-
-	require.Equal(t, adapter.PreMatchFlow, result.Action)
-	require.Equal(t, netip.MustParseAddrPort("203.0.113.1:443"), result.Destination)
-	require.Equal(t, 1, dnsRouter.lookupCount)
-}
-
-func TestPreMatchResolvedFlowKeepsNestedGroupInterruptAndQUICCache(t *testing.T) {
-	for _, interruptOuter := range []bool{true, false} {
-		name := "inner group"
-		if interruptOuter {
-			name = "outer group"
-		}
-		t.Run(name, func(t *testing.T) {
-			leaf := &testResolvingFlowOutbound{
-				testFlowOutbound: &testFlowOutbound{outboundType: "masque", tag: "vpn"},
-				queryOptions:     adapter.DNSQueryOptions{Strategy: C.DomainStrategyIPv4Only},
-			}
-			inner := &testOutboundGroup{selected: leaf, interrupts: &quicCloseGroup{group: interrupt.NewGroup()}}
-			outer := &testOutboundGroup{selected: inner, interrupts: &quicCloseGroup{group: interrupt.NewGroup()}}
-			router, metadata := newPreMatchQUICRouter(t, 30*time.Millisecond)
-			originalDestination := metadata.Destination
-			router.outbound = &testL3OutboundManager{defaultOutbound: outer}
-			dnsRouter := &testL3DNSRouter{addresses: []netip.Addr{netip.MustParseAddr("203.0.113.1")}}
-			router.dns = dnsRouter
-			metadata.Protocol = C.ProtocolQUIC
-			metadata.SniffHost = "example.com"
-			metadata.SniffDestination = originalDestination
-			metadata.Destination = M.ParseSocksaddr("example.com:443")
-			metadata.DestOverride = true
-			// A match-only resolve result must not replace the selected endpoint's resolver.
-			metadata.CacheIPs = []netip.Addr{netip.MustParseAddr("192.0.2.99")}
-
-			result := router.preMatchFlow(context.Background(), &metadata, originalDestination, nil, "")
-			require.Equal(t, adapter.PreMatchFlow, result.Action)
-			require.Same(t, leaf, result.Outbound)
-			require.Equal(t, netip.MustParseAddrPort("203.0.113.1:443"), result.Destination)
-			require.Equal(t, leaf.queryOptions, dnsRouter.options)
-			require.Equal(t, []adapter.Outbound{outer, inner, leaf}, metadata.OutboundChain)
-			tracker := result.NewTracker()
-			handle := &preMatchQUICHandle{tracker: tracker}
-			tracker.AttachFlow(handle)
-			if interruptOuter {
-				outer.interrupts.group.Interrupt(true)
-			} else {
-				inner.interrupts.group.Interrupt(true)
-			}
-			require.Equal(t, 1, handle.closes)
-			require.Equal(t, 1, outer.interrupts.removals)
-			require.Equal(t, 1, inner.interrupts.removals)
-			host, loaded := router.lookupQUICSniff(metadata.Source, originalDestination)
-			require.True(t, loaded)
-			require.Equal(t, "example.com", host)
-			_, wrongKey := router.lookupQUICSniff(metadata.Source, M.SocksaddrFrom(result.Destination.Addr(), result.Destination.Port()))
-			require.False(t, wrongKey)
-			outer.interrupts.group.Interrupt(true)
-			inner.interrupts.group.Interrupt(true)
-			require.Equal(t, 1, handle.closes)
-			require.Eventually(t, func() bool { return router.quicSniffCache.Len() == 0 }, time.Second, time.Millisecond)
-			tracker.CloseFlow(tun.FlowCloseFinished)
-			require.Zero(t, router.quicSniffCache.Len())
-		})
-	}
-}
 
 type testL3DNSRouter struct {
 	adapter.DNSRouter
@@ -280,9 +189,8 @@ func (m *testL3OutboundManager) Outbound(tag string) (adapter.Outbound, bool) {
 
 type testOutboundGroup struct {
 	adapter.Outbound
-	now        string
-	selected   adapter.Outbound
-	interrupts *quicCloseGroup
+	now      string
+	selected adapter.Outbound
 }
 
 func (g *testOutboundGroup) Now() string {
@@ -294,9 +202,6 @@ func (g *testOutboundGroup) Selected(string) adapter.Outbound {
 }
 
 func (g *testOutboundGroup) AttachConnection(closer io.Closer) func() {
-	if g.interrupts != nil {
-		return g.interrupts.AttachConnection(closer)
-	}
 	return func() {}
 }
 

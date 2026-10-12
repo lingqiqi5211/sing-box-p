@@ -9,7 +9,6 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
-	R "github.com/sagernet/sing-box/route/rule"
 	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing-tun/gtcpip/header"
 	M "github.com/sagernet/sing/common/metadata"
@@ -61,79 +60,6 @@ func TestL3UDPDestinationNAT(t *testing.T) {
 	require.Equal(t, fakeDestination.Port(), reverseUDP.SourcePort())
 	require.Equal(t, client.Port(), reverseUDP.DestinationPort())
 	require.Equal(t, []byte("reply"), reverseUDP.Payload())
-}
-
-func TestL3UDPSniffOverrideDestinationNAT(t *testing.T) {
-	client := netip.MustParseAddrPort("192.0.2.1:1234")
-	originalDestination := netip.MustParseAddrPort("192.0.2.2:443")
-	realDestination := netip.MustParseAddrPort("203.0.113.1:443")
-	portAddress := netip.MustParseAddr("10.0.0.2")
-	port := &testL3NATPort{inet4Address: portAddress}
-	selectedOutbound := &testL3NATFlowOutbound{
-		testResolvingFlowOutbound: &testResolvingFlowOutbound{
-			testFlowOutbound: &testFlowOutbound{outboundType: "wireguard", tag: "wg"},
-			queryOptions:     adapter.DNSQueryOptions{Strategy: C.DomainStrategyIPv4Only},
-		},
-		port: port,
-	}
-	dnsRouter := &testL3DNSRouter{addresses: []netip.Addr{realDestination.Addr()}}
-	router := &Router{
-		ctx:          context.Background(),
-		logger:       log.NewNOPFactory().NewLogger("router"),
-		outbound:     &testL3OutboundManager{defaultOutbound: selectedOutbound},
-		dns:          dnsRouter,
-		dnsTransport: new(testL3DNSTransportManager),
-		rules: []adapter.Rule{
-			&testL3Rule{action: new(R.RuleActionSniffOverrideDestination)},
-		},
-	}
-	handler := &testL3RouterNATHandler{
-		router: &testL3SniffHostRouter{
-			router:    router,
-			sniffHost: "example.com",
-		},
-	}
-	writeback := new(testL3NATWriteback)
-	dispatcher := tun.NewForwardDispatcher(handler, writeback, log.NewNOPFactory().NewLogger("forward"), tun.UDPNatOptions{}, 0)
-	defer dispatcher.Close()
-	stage := dispatcher.NewStage(nil)
-
-	request := buildTestIPv4UDPPacket(client, originalDestination, []byte("request"))
-	require.True(t, stage.Dispatch(request))
-	stage.Flush()
-	require.Equal(t, 1, dnsRouter.lookupCount)
-	require.Len(t, port.writtenPackets, 1)
-
-	forwardIP := header.IPv4(port.writtenPackets[0])
-	forwardUDP := header.UDP(forwardIP.Payload())
-	require.Equal(t, portAddress, forwardIP.SourceAddr())
-	require.Equal(t, realDestination.Addr(), forwardIP.DestinationAddr())
-	require.Equal(t, realDestination.Port(), forwardUDP.DestinationPort())
-
-	require.NotNil(t, port.returnPath)
-	replyTarget := netip.AddrPortFrom(portAddress, forwardUDP.SourcePort())
-	reply := buildTestIPv4UDPPacket(realDestination, replyTarget, []byte("reply"))
-	require.Empty(t, port.returnPath.ReturnPackets([][]byte{reply}))
-	require.Len(t, writeback.packets, 1)
-
-	reverseIP := header.IPv4(writeback.packets[0])
-	reverseUDP := header.UDP(reverseIP.Payload())
-	require.Equal(t, originalDestination.Addr(), reverseIP.SourceAddr())
-	require.Equal(t, client.Addr(), reverseIP.DestinationAddr())
-	require.Equal(t, originalDestination.Port(), reverseUDP.SourcePort())
-	require.Equal(t, client.Port(), reverseUDP.DestinationPort())
-	require.Equal(t, []byte("reply"), reverseUDP.Payload())
-}
-
-type testL3SniffHostRouter struct {
-	adapter.Router
-	router    *Router
-	sniffHost string
-}
-
-func (r *testL3SniffHostRouter) PreMatch(metadata adapter.InboundContext, firstPacket []byte) adapter.PreMatchResult {
-	metadata.SniffHost = r.sniffHost
-	return r.router.PreMatch(metadata, firstPacket)
 }
 
 type testL3RouterNATHandler struct {

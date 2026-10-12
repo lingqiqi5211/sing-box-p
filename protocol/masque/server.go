@@ -50,22 +50,6 @@ type ServerEndpoint struct {
 	tlsConfig            tls.ServerConfig
 	http3                bool
 	quicOptions          option.QUICOptions
-	server               *masque.Server
-	deviceOptions        *device.Options
-	device               device.Device
-	localAddresses       []netip.Prefix
-	started              atomic.Bool
-	innerDNSQueryOptions adapter.DNSQueryOptions
-}
-
-func NewServerEndpoint(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.MASQUEServerEndpointOptions) (adapter.Endpoint, error) {
-	ctx                  context.Context
-	dnsRouter            adapter.DNSRouter
-	listener             *listener.Listener
-	httpServer           *http.Server
-	tlsConfig            tls.ServerConfig
-	http3                bool
-	quicOptions          option.QUICOptions
 	h3CongestionControl  option.H3CongestionControl
 	server               *masque.Server
 	deviceOptions        *device.Options
@@ -109,11 +93,6 @@ func NewServerEndpoint(ctx context.Context, router adapter.Router, logger log.Co
 			router:  router,
 			logger:  logger,
 		},
-		ctx:            ctx,
-		dnsRouter:      service.FromContext[adapter.DNSRouter](ctx),
-		http3:          serveHTTP3,
-		quicOptions:    options.HTTP3Options,
-		localAddresses: options.Address,
 		ctx:                  ctx,
 		dnsRouter:            service.FromContext[adapter.DNSRouter](ctx),
 		innerDNSQueryOptions: innerDNSQueryOptions,

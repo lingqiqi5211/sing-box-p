@@ -22,6 +22,22 @@ type discoveryTestTransport struct {
 	fakeDNSTransport
 }
 
+type countingDNSRule struct {
+	adapter.DNSRule
+	matchCount  int
+	legacyCount int
+}
+
+func (r *countingDNSRule) Match(metadata *adapter.InboundContext) bool {
+	r.matchCount++
+	return r.DNSRule.Match(metadata)
+}
+
+func (r *countingDNSRule) LegacyPreMatch(metadata *adapter.InboundContext) bool {
+	r.legacyCount++
+	return r.DNSRule.LegacyPreMatch(metadata)
+}
+
 func (t *discoveryTestTransport) Exchange(_ context.Context, message *mDNS.Msg) (*mDNS.Msg, error) {
 	t.queryCount.Add(1)
 	response := new(mDNS.Msg)
@@ -64,9 +80,18 @@ func TestResolverDiscoveryPolicy(t *testing.T) {
 					require.NoError(t, router.Start(adapter.StartStateStart, scope))
 					router.legacyDNSMode = mode == "legacy" || mode == "legacy-reject"
 					reject := mode == "rules-reject" || mode == "legacy-reject"
-					var rejectRule *legacyAliasRule
+					var rejectRule *countingDNSRule
 					if reject {
-						rejectRule = &legacyAliasRule{action: &R.RuleActionReject{Method: C.RuleActionRejectMethodDefault, Rcode: mDNS.RcodeRefused}}
+						rule, err := R.NewDNSRule(ctx, log.NewNOPFactory().Logger(), option.DNSRule{
+							DefaultOptions: option.DefaultDNSRule{
+								DNSRuleAction: option.DNSRuleAction{
+									Action:        C.RuleActionTypeReject,
+									RejectOptions: option.RejectActionOptions{Method: C.RuleActionRejectMethodDefault},
+								},
+							},
+						}, true, false)
+						require.NoError(t, err)
+						rejectRule = &countingDNSRule{DNSRule: rule}
 						router.rules = []adapter.DNSRule{rejectRule}
 					}
 					queryOptions := adapter.DNSQueryOptions{}
@@ -105,13 +130,13 @@ func TestResolverDiscoveryPolicy(t *testing.T) {
 						require.Empty(t, response.Answer)
 						require.Zero(t, transport.queryCount.Load())
 						if rejectRule != nil {
-							require.Zero(t, rejectRule.matchCount+rejectRule.legacyPreMatchCount)
+							require.Zero(t, rejectRule.matchCount+rejectRule.legacyCount)
 						}
 					} else if reject {
 						require.Equal(t, mDNS.RcodeRefused, response.Rcode)
 						require.Empty(t, response.Answer)
 						require.Zero(t, transport.queryCount.Load())
-						require.Positive(t, rejectRule.matchCount+rejectRule.legacyPreMatchCount)
+						require.Positive(t, rejectRule.matchCount+rejectRule.legacyCount)
 					} else {
 						require.Equal(t, mDNS.RcodeSuccess, response.Rcode)
 						require.Len(t, response.Answer, 1)

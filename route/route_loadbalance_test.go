@@ -5,16 +5,14 @@ import (
 	"errors"
 	"net"
 	"testing"
-	"time"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/expiringmap"
-	"github.com/sagernet/sing-box/common/interrupt"
 	"github.com/sagernet/sing-box/common/trafficcontrol"
 	"github.com/sagernet/sing-box/common/urltest"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/protocol/group"
+	"github.com/sagernet/sing/common/bufio"
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
@@ -48,8 +46,8 @@ func TestResolveLoadBalanceChainAndTrackerSnapshot(t *testing.T) {
 	for _, network := range []string{N.NetworkTCP, N.NetworkUDP} {
 		t.Run(network, func(t *testing.T) {
 			balance := newRouteLoadBalance(t, group.StrategyRoundRobin)
-			outer := &testOutboundGroup{Outbound: &testFlowOutbound{tag: "outer"}, selected: balance, interrupts: &quicCloseGroup{group: interrupt.NewGroup()}}
-			metadata := quicCloseMetadata()
+			outer := &testOutboundGroup{Outbound: &testFlowOutbound{tag: "outer"}, selected: balance}
+			metadata := adapter.InboundContext{Source: M.ParseSocksaddr("192.0.2.1:10000"), Destination: M.ParseSocksaddr("example.com:443")}
 			metadata.Network = network
 			require.Nil(t, balance.Selected(network))
 			require.Equal(t, "balance", group.RealTag(outer, network))
@@ -74,18 +72,6 @@ func TestResolveLoadBalanceChainAndTrackerSnapshot(t *testing.T) {
 			require.Equal(t, "second", nextChain[2].Tag())
 			require.Equal(t, []string{"first", "balance", "outer"}, snapshot.Chain)
 
-			router := &Router{quicSniffCache: expiringmap.New[quicSniffCacheKey, string](time.Minute)}
-			defer router.quicSniffCache.Close()
-			packet := &quicClosePacketConn{}
-			completions := 0
-			packet.onClose = registerInterrupt(chain, packet, router.wrapQUICSniffIdleCache(metadata, func(error) { completions++ }))
-			outer.interrupts.group.Interrupt(true)
-			outer.interrupts.group.Interrupt(true)
-			require.Equal(t, 1, packet.closes)
-			require.Equal(t, 1, completions)
-			host, found := router.lookupQUICSniff(metadata.Source, metadata.Destination)
-			require.True(t, found)
-			require.Equal(t, metadata.SniffHost, host)
 		})
 	}
 }
@@ -132,9 +118,9 @@ func TestResolvedChainNotifiesDialFailure(t *testing.T) {
 	defer peer.Close()
 	manager.NewConnection(context.Background(), failureDialer{}, conn, metadata, nil)
 	require.Equal(t, 1, listener.calls)
-	manager.NewPacketConnection(context.Background(), failureDialer{}, &quicClosePacketConn{}, metadata, nil)
+	manager.NewPacketConnection(context.Background(), failureDialer{}, bufio.NewPacketConn(newSelectorInterruptTestConn()), metadata, nil)
 	require.Equal(t, 2, listener.calls)
 	metadata.UDPConnect = true
-	manager.NewPacketConnection(context.Background(), failureDialer{}, &quicClosePacketConn{}, metadata, nil)
+	manager.NewPacketConnection(context.Background(), failureDialer{}, bufio.NewPacketConn(newSelectorInterruptTestConn()), metadata, nil)
 	require.Equal(t, 3, listener.calls)
 }

@@ -550,7 +550,7 @@ func (r *Router) preMatchFlow(ctx context.Context, metadata *adapter.InboundCont
 		}
 	}
 	if metadata.Destination.IsDomain() {
-		if !metadata.FakeIP && !metadata.DestOverride {
+		if !metadata.FakeIP {
 			return continueResult
 		}
 		resolvedByOutbound := false

@@ -855,9 +855,6 @@
         "reverse_mapping": {
           "type": "boolean"
         },
-        "default_reject_rcode": {
-          "$ref": "#/$defs/DNSRejectRCode"
-        },
         "allow_resolver_discovery": {
           "type": "boolean"
         },
@@ -1026,40 +1023,6 @@
         {
           "type": "string",
           "enum": [
-            "NOERROR",
-            "FORMERR",
-            "SERVFAIL",
-            "NXDOMAIN",
-            "NOTIMP",
-            "NOTIMPL",
-            "REFUSED",
-            "YXDOMAIN",
-            "YXRRSET",
-            "NXRRSET",
-            "NOTAUTH",
-            "NOTZONE",
-            "DSOTYPENI",
-            "BADSIG",
-            "BADKEY",
-            "BADTIME",
-            "BADMODE",
-            "BADNAME",
-            "BADALG",
-            "BADTRUNC",
-            "BADCOOKIE"
-          ]
-        }
-      ]
-    },
-    "DNSRejectRCode": {
-      "anyOf": [
-        {
-          "type": "integer"
-        },
-        {
-          "type": "string",
-          "enum": [
-            "",
             "NOERROR",
             "FORMERR",
             "SERVFAIL",
@@ -1898,9 +1861,6 @@
             },
             "race": {
               "type": "boolean"
-            },
-            "rcode": {
-              "$ref": "#/$defs/DNSRejectRCode"
             },
             "method": {
               "type": "string",
@@ -3506,17 +3466,6 @@
         }
       },
       "additionalProperties": false
-    },
-    "DomainMatchStrategy": {
-      "type": "string",
-      "enum": [
-        "",
-        "as_is",
-        "prefer_fqdn",
-        "prefer_sniffhost",
-        "fqdn_only",
-        "sniffhost_only"
-      ]
     },
     "DomainResolver": {
       "anyOf": [
@@ -6542,9 +6491,6 @@
                 }
               ]
             },
-            "domain_match_strategy": {
-              "$ref": "#/$defs/DomainMatchStrategy"
-            },
             "network_interface_address": {
               "type": "object",
               "propertyNames": {
@@ -6601,9 +6547,6 @@
               "items": {
                 "$ref": "#/$defs/HeadlessRule"
               }
-            },
-            "domain_match_strategy": {
-              "$ref": "#/$defs/DomainMatchStrategy"
             },
             "invert": {
               "type": "boolean"
@@ -11492,9 +11435,6 @@
             "rule_set_ip_cidr_match_source": {
               "type": "boolean"
             },
-            "domain_match_strategy": {
-              "$ref": "#/$defs/DomainMatchStrategy"
-            },
             "invert": {
               "type": "boolean"
             }
@@ -11519,9 +11459,6 @@
               "items": {
                 "$ref": "#/$defs/NestedRule"
               }
-            },
-            "domain_match_strategy": {
-              "$ref": "#/$defs/DomainMatchStrategy"
             },
             "invert": {
               "type": "boolean"
@@ -12701,9 +12638,6 @@
             },
             "fallback_delay": {
               "$ref": "#/$defs/Duration"
-            },
-            "direct_domain_strategy": {
-              "$ref": "#/$defs/DomainStrategy"
             },
             "proxy_protocol": {
               "type": "integer",
@@ -16982,15 +16916,6 @@
         },
         "default_http_client": {
           "type": "string"
-        },
-        "default_domain_match_strategy": {
-          "type": "string",
-          "enum": [
-            "",
-            "as_is",
-            "prefer_fqdn",
-            "prefer_sniffhost"
-          ]
         }
       },
       "additionalProperties": false
@@ -17549,9 +17474,6 @@
                 "rule_set_ip_cidr_match_source": {
                   "type": "boolean"
                 },
-                "domain_match_strategy": {
-                  "$ref": "#/$defs/DomainMatchStrategy"
-                },
                 "invert": {
                   "type": "boolean"
                 }
@@ -17584,9 +17506,6 @@
                   "items": {
                     "$ref": "#/$defs/NestedRule"
                   }
-                },
-                "domain_match_strategy": {
-                  "$ref": "#/$defs/DomainMatchStrategy"
                 },
                 "invert": {
                   "type": "boolean"
@@ -17989,17 +17908,6 @@
             },
             "timeout": {
               "$ref": "#/$defs/Duration"
-            }
-          },
-          "required": [
-            "action"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "action": {
-              "const": "sniff-override-destination"
             }
           },
           "required": [
