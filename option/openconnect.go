@@ -3,6 +3,7 @@ package option
 import "github.com/sagernet/sing/common/json/badoption"
 
 type OpenConnectEndpointOptions struct {
+	TCPCongestionControl TCPCongestionControl `json:"tcp_congestion_control,omitempty" enum:"reno,cubic,bbr"`
 	DialerOptions
 	InnerDomainResolver            *DomainResolveOptions                `json:"inner_domain_resolver,omitempty"`
 	System                         bool                                 `json:"system,omitempty"`

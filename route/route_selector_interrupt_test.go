@@ -30,12 +30,12 @@ func TestSelectorInterruptRoutedConnections(t *testing.T) {
 				t.Run(kind+"/"+network+"/"+policy, func(t *testing.T) {
 					ctx := context.Background()
 					if policy == "resource-download" {
-						ctx = interrupt.ContextWithIsResourceDownload(ctx)
+						ctx = interrupt.ContextWithIsResourceDownload(ctx, true)
 					}
 					logger := log.NewNOPFactory().NewLogger("test")
 					scope := adapter.NewScope(ctx, logger)
 					t.Cleanup(func() { require.NoError(t, scope.Close()) })
-					manager := NewConnectionManager(logger)
+					manager := NewConnectionManager(ctx, logger)
 					incoming := newSelectorInterruptTestConn()
 					remote := newSelectorInterruptTestConn()
 					t.Cleanup(func() { incoming.Close(); remote.Close() })

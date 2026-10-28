@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	C "github.com/sagernet/sing-box/constant"
 )
 
 const (
@@ -83,7 +85,7 @@ func (c *processPathCache) cached(inode, uid uint32) []string {
 }
 
 func (c *processPathCache) cachedLocked(inode, uid uint32) []string {
-	for _, scope := range []uint32{uid, processPathsAllUsers} {
+	for _, scope := range processPathScopes(uid) {
 		if entry, ok := c.snapshots[scope]; ok && c.now().Before(entry.expires) {
 			if paths := entry.paths[inode]; len(paths) > 0 {
 				return paths
@@ -114,9 +116,9 @@ func (c *processPathCache) find(ctx context.Context, inode, uid uint32, required
 	generation := c.generation
 	c.access.Unlock()
 	complete := true
-	// A socket UID can differ from the UID of its holder (netd, privilege
-	// drops, descriptor passing). Preserve the all-process fallback.
-	for _, scope := range []uint32{uid, processPathsAllUsers} {
+	// A socket UID can differ from the UID of its holder (privilege drops,
+	// descriptor passing). Preserve the all-process fallback.
+	for _, scope := range processPathScopes(uid) {
 		paths, scanned, err := c.scan(ctx, scope, inode, required, generation)
 		if err != nil {
 			return nil, err
@@ -201,6 +203,18 @@ func (c *processPathCache) runScan(ctx context.Context, scope uint32, generation
 		}
 	}
 	close(scan.done)
+}
+
+// The socket keeps the uid it was created with, while /proc reflects the
+// current uid of the process, so a socket created before a privilege drop
+// only appears under a scan of all users. On Android, netd chowns the DNS
+// sockets it opens on behalf of an app to the app's uid, so such a scan
+// would attribute them to netd.
+func processPathScopes(uid uint32) []uint32 {
+	if C.IsAndroid {
+		return []uint32{uid}
+	}
+	return []uint32{uid, processPathsAllUsers}
 }
 
 func processPathNotFound(inode, uid uint32) error {

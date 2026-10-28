@@ -67,6 +67,9 @@ type clientState struct {
 }
 
 func NewClientEndpoint(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.MASQUEClientEndpointOptions) (adapter.Endpoint, error) {
+	if err := options.TCPCongestionControl.Validate(); err != nil {
+		return nil, err
+	}
 	if err := options.H3CongestionControl.Validate([]int{options.ResolvedVersion()}, true); err != nil {
 		return nil, err
 	}
@@ -137,6 +140,8 @@ func NewClientEndpoint(ctx context.Context, router adapter.Router, logger log.Co
 			Adapter: endpoint.NewAdapterWithDialerOptions(C.TypeMASQUEClient, tag, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, options.DialerOptions),
 			router:  router,
 			logger:  logger,
+			system:  options.System,
+			network: service.FromContext[adapter.NetworkManager](ctx),
 		},
 		ctx:                  ctx,
 		dnsRouter:            service.FromContext[adapter.DNSRouter](ctx),
@@ -218,6 +223,16 @@ func (c *ClientEndpoint) WriteInboundBuffers(packetBuffers []*buf.Buffer) error 
 	return err
 }
 
+func (c *ClientEndpoint) WaitWriteInboundBuffers(packetBuffers []*buf.Buffer) error {
+	if !c.state.Load().configured {
+		buf.ReleaseMulti(packetBuffers)
+		return nil
+	}
+	err := c.device.WaitWriteInboundBuffers(packetBuffers)
+	buf.ReleaseMulti(packetBuffers)
+	return err
+}
+
 func (c *ClientEndpoint) FrontHeadroom() int {
 	return c.device.FrontHeadroom()
 }
@@ -280,7 +295,7 @@ func (c *ClientEndpoint) DetachReturn(returnPath tun.Return) error {
 }
 
 func (c *ClientEndpoint) JudgeFlow(network uint8, source netip.AddrPort, destination netip.AddrPort, firstPacket []byte) tun.FlowVerdict {
-	return c.judgeFlow(c, c.state.Load().localAddresses, network, source, destination, firstPacket)
+	return c.judgeFlow(c.ctx, c, c.state.Load().localAddresses, network, source, destination, firstPacket)
 }
 
 func (c *ClientEndpoint) NewDNSPacket(payload []byte, source M.Socksaddr, destination M.Socksaddr, writer N.PacketWriter) {

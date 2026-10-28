@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/netip"
 	"testing"
+	"time"
 
 	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
@@ -31,12 +32,21 @@ func TestL3UDPDestinationNAT(t *testing.T) {
 		},
 	}
 	writeback := new(testL3NATWriteback)
-	dispatcher := tun.NewForwardDispatcher(handler, writeback, log.NewNOPFactory().NewLogger("forward"), tun.UDPNatOptions{}, 0)
+	dispatcher := tun.NewForwardDispatcher(handler, writeback, log.NewNOPFactory().NewLogger("forward"), 1500, tun.UDPNatOptions{}, 0)
 	defer dispatcher.Close()
-	stage := dispatcher.NewStage(nil)
+	judged := make(chan struct{}, 1)
+	stage := dispatcher.NewStage(nil, func() { judged <- struct{}{} })
 
 	request := buildTestIPv4UDPPacket(client, fakeDestination, []byte("request"))
 	require.True(t, stage.Dispatch(request))
+	select {
+	case <-judged:
+	case <-time.After(time.Second):
+		t.Fatal("flow judgement did not complete")
+	}
+	stage.ResumeJudged(func([]byte, tun.ForwardFrameMeta) {
+		t.Error("NAT flow was not handled")
+	})
 	stage.Flush()
 	require.Len(t, port.writtenPackets, 1)
 

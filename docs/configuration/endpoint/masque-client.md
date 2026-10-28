@@ -22,6 +22,7 @@
   "disable_version_fallback": false,
   "tls": {},
   "advertise_routes": [],
+  // "tcp_congestion_control": "bbr",
   "system": false,
   "inner_domain_resolver": "", // or {}
   "name": "",
@@ -111,6 +112,20 @@ Required for HTTP/3.
 List of IP prefixes to advertise to the server.
 
 The server will route traffic for these prefixes into this endpoint, where it is handled as inbound traffic.
+
+### tcp_congestion_control
+
+Selects the congestion controller for the local sender in this endpoint's internal Go TCP stack.
+
+Available values: `reno`, `cubic`, `bbr`. Omitting the field preserves the default, CUBIC. Empty values and `none` are not supported.
+
+Only affects TCP connections terminated or initiated by this endpoint's internal Go TCP stack. It does not affect kernel TCP, TCP forwarded at L3, UDP, or inner QUIC. Peers may select different algorithms; for example, configure this field on the server to control TCP download data sent by its internal stack to the client.
+
+Allowed with either `system: false` or `system: true`, but only applies to connections handled by the internal Go TCP stack. Enabling the system interface does not make this setting affect kernel TCP.
+
+Applies to HTTP/1, HTTP/2, and HTTP/3, including after version fallback. Does not require a build with QUIC support. This field is independent of `h3_congestion_control`, which controls outer HTTP/3 congestion, and can be combined with its `none` value.
+
+Changing algorithms does not guarantee higher throughput; test on the actual network path.
 
 ### system
 

@@ -5,7 +5,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/sagernet/sing-box/option"
 	tun "github.com/sagernet/sing-tun"
 )
 
@@ -52,7 +51,7 @@ func TestAndroidVPNRouteBypassPreservesRouteAddress(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, bypass := range []bool{false, true} {
-				platform := &tunOptions{options, routeRanges, option.TunPlatformOptions{AndroidVPNRouteBypass: bypass}}
+				platform := &tunOptions{Options: options, routeRanges: routeRanges, androidVPNRouteBypass: bypass}
 				if platform.GetAndroidVPNRouteBypass() != bypass {
 					t.Fatal("lost platform route bypass flag")
 				}

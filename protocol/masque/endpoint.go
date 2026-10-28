@@ -28,8 +28,10 @@ func RegisterEndpoint(registry *endpoint.Registry) {
 
 type endpointBase struct {
 	endpoint.Adapter
-	router adapter.Router
-	logger log.ContextLogger
+	router  adapter.Router
+	logger  log.ContextLogger
+	system  bool
+	network adapter.NetworkManager
 }
 
 func newDeviceOptions(ctx context.Context, logger log.ContextLogger, handler tun.Handler, options option.MASQUEEndpointOptions, udpTimeout time.Duration, address []netip.Prefix) *device.Options {
@@ -37,20 +39,21 @@ func newDeviceOptions(ctx context.Context, logger log.ContextLogger, handler tun
 		udpTimeout = C.UDPTimeout
 	}
 	return &device.Options{
-		Context:             ctx,
-		Logger:              logger,
-		System:              options.System,
-		Handler:             handler,
-		UDPTimeout:          udpTimeout,
-		ICMPTimeout:         C.ICMPTimeout,
-		UDPMapping:          tun.NATMapping(options.UDPMapping),
-		UDPFiltering:        tun.NATFiltering(options.UDPFiltering),
-		UDPNATMax:           options.UDPNATMax,
-		InterfaceFinder:     service.FromContext[adapter.NetworkManager](ctx).InterfaceFinder(),
-		Name:                options.Name,
-		NamePrefix:          "masque",
-		MTU:                 options.MTU,
-		PacketFrontHeadroom: masque.PacketHeadroom,
+		TCPCongestionControl: string(options.TCPCongestionControl),
+		Context:              ctx,
+		Logger:               logger,
+		System:               options.System,
+		Handler:              handler,
+		UDPTimeout:           udpTimeout,
+		ICMPTimeout:          C.ICMPTimeout,
+		UDPMapping:           tun.NATMapping(options.UDPMapping),
+		UDPFiltering:         tun.NATFiltering(options.UDPFiltering),
+		UDPNATMax:            options.UDPNATMax,
+		InterfaceFinder:      service.FromContext[adapter.NetworkManager](ctx).InterfaceFinder(),
+		Name:                 options.Name,
+		NamePrefix:           "masque",
+		MTU:                  options.MTU,
+		PacketFrontHeadroom:  masque.PacketHeadroom,
 		Configuration: device.Configuration{
 			MTU:     options.MTU,
 			Address: address,
@@ -101,9 +104,12 @@ func (e *endpointBase) newDNSPacket(ctx context.Context, endpoint adapter.Endpoi
 	e.router.HijackDNSPacket(ctx, payload, writer, metadata)
 }
 
-func (e *endpointBase) judgeFlow(endpoint adapter.Endpoint, localAddresses []netip.Prefix, network uint8, source netip.AddrPort, destination netip.AddrPort, firstPacket []byte) tun.FlowVerdict {
+func (e *endpointBase) judgeFlow(ctx context.Context, endpoint adapter.Endpoint, localAddresses []netip.Prefix, network uint8, source netip.AddrPort, destination netip.AddrPort, firstPacket []byte) tun.FlowVerdict {
 	if isLocalAddress(localAddresses, destination.Addr()) {
-		return tun.FlowVerdict{Action: tun.ActionAccept}
+		if e.system {
+			return tun.FlowVerdict{Action: tun.ActionAccept}
+		}
+		return adapter.JudgeHostFlow(ctx, e.network, e.logger, network, source, destination)
 	}
 	return adapter.JudgeFlow(e.router, adapter.InboundContext{Inbound: endpoint.Tag(), InboundType: endpoint.Type()}, network, source, destination, firstPacket)
 }

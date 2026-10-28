@@ -78,6 +78,9 @@ type clientState struct {
 }
 
 func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.OpenConnectEndpointOptions) (adapter.Endpoint, error) {
+	if err := options.TCPCongestionControl.Validate(); err != nil {
+		return nil, err
+	}
 	innerDNSQueryOptions, err := dialer.NewInnerDNSQueryOptions(ctx, options.InnerDomainResolver)
 	if err != nil {
 		return nil, E.Cause(err, "inner domain resolver")
@@ -116,6 +119,8 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 			Adapter: endpoint.NewAdapterWithDialerOptions(C.TypeOpenConnect, tag, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, options.DialerOptions),
 			router:  router,
 			logger:  logger,
+			system:  options.System,
+			network: service.FromContext[adapter.NetworkManager](ctx),
 		},
 		loopContext:   loopContext,
 		cancelLoop:    cancelLoop,
@@ -167,21 +172,22 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 	}
 	networkManager := service.FromContext[adapter.NetworkManager](ctx)
 	openConnectEndpoint.deviceOptions = &device.Options{
-		Context:             ctx,
-		Logger:              logger,
-		System:              options.System,
-		Handler:             openConnectEndpoint,
-		UDPTimeout:          udpTimeout,
-		ICMPTimeout:         C.ICMPTimeout,
-		UDPMapping:          tun.NATMapping(options.UDPMapping),
-		UDPFiltering:        tun.NATFiltering(options.UDPFiltering),
-		UDPNATMax:           options.UDPNATMax,
-		InterfaceFinder:     networkManager.InterfaceFinder(),
-		Name:                options.Name,
-		NamePrefix:          "oc",
-		MTU:                 openconnecttransport.DefaultMTU,
-		PacketFrontHeadroom: openconnect.PacketHeadroom,
-		PacketRearHeadroom:  openconnect.PacketRearHeadroom,
+		TCPCongestionControl: string(options.TCPCongestionControl),
+		Context:              ctx,
+		Logger:               logger,
+		System:               options.System,
+		Handler:              openConnectEndpoint,
+		UDPTimeout:           udpTimeout,
+		ICMPTimeout:          C.ICMPTimeout,
+		UDPMapping:           tun.NATMapping(options.UDPMapping),
+		UDPFiltering:         tun.NATFiltering(options.UDPFiltering),
+		UDPNATMax:            options.UDPNATMax,
+		InterfaceFinder:      networkManager.InterfaceFinder(),
+		Name:                 options.Name,
+		NamePrefix:           "oc",
+		MTU:                  openconnecttransport.DefaultMTU,
+		PacketFrontHeadroom:  openconnect.PacketHeadroom,
+		PacketRearHeadroom:   openconnect.PacketRearHeadroom,
 		Configuration: device.Configuration{
 			MTU: openconnecttransport.DefaultMTU,
 		},
@@ -579,7 +585,7 @@ func (e *Endpoint) DetachReturn(returnPath tun.Return) error {
 }
 
 func (e *Endpoint) JudgeFlow(network uint8, source netip.AddrPort, destination netip.AddrPort, firstPacket []byte) tun.FlowVerdict {
-	return judgeOpenConnectFlow(e.router, e.Tag(), e.Type(), e.state.Load().localAddresses, network, source, destination, firstPacket)
+	return e.judgeFlow(e.loopContext, e, e.state.Load().localAddresses, network, source, destination, firstPacket)
 }
 
 func (e *Endpoint) NewDNSPacket(payload []byte, source M.Socksaddr, destination M.Socksaddr, writer N.PacketWriter) {

@@ -98,6 +98,11 @@ func NewURLTest(ctx context.Context, router adapter.Router, logger log.ContextLo
 			maxDelay: time.Duration(options.Fallback.MaxDelay).Milliseconds(),
 		}
 	}
+	for i, tag := range outbound.tags {
+		if slices.Contains(outbound.tags[:i], tag) {
+			return nil, E.New("duplicate tag: ", tag)
+		}
+	}
 	return outbound, nil
 }
 

@@ -60,6 +60,9 @@ type ServerEndpoint struct {
 }
 
 func NewServerEndpoint(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.MASQUEServerEndpointOptions) (adapter.Endpoint, error) {
+	if err := options.TCPCongestionControl.Validate(); err != nil {
+		return nil, err
+	}
 	if err := options.H3CongestionControl.Validate(options.Versions(), true); err != nil {
 		return nil, err
 	}
@@ -92,6 +95,8 @@ func NewServerEndpoint(ctx context.Context, router adapter.Router, logger log.Co
 			Adapter: endpoint.NewAdapter(C.TypeMASQUEServer, tag, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, nil),
 			router:  router,
 			logger:  logger,
+			system:  options.System,
+			network: service.FromContext[adapter.NetworkManager](ctx),
 		},
 		ctx:                  ctx,
 		dnsRouter:            service.FromContext[adapter.DNSRouter](ctx),
@@ -224,6 +229,12 @@ func (s *ServerEndpoint) WriteInboundBuffers(packetBuffers []*buf.Buffer) error 
 	return err
 }
 
+func (s *ServerEndpoint) WaitWriteInboundBuffers(packetBuffers []*buf.Buffer) error {
+	err := s.device.WaitWriteInboundBuffers(packetBuffers)
+	buf.ReleaseMulti(packetBuffers)
+	return err
+}
+
 func (s *ServerEndpoint) FrontHeadroom() int {
 	return s.device.FrontHeadroom()
 }
@@ -261,7 +272,7 @@ func (s *ServerEndpoint) DetachReturn(returnPath tun.Return) error {
 }
 
 func (s *ServerEndpoint) JudgeFlow(network uint8, source netip.AddrPort, destination netip.AddrPort, firstPacket []byte) tun.FlowVerdict {
-	return s.judgeFlow(s, s.localAddresses, network, source, destination, firstPacket)
+	return s.judgeFlow(s.ctx, s, s.localAddresses, network, source, destination, firstPacket)
 }
 
 func (s *ServerEndpoint) NewDNSPacket(payload []byte, source M.Socksaddr, destination M.Socksaddr, writer N.PacketWriter) {

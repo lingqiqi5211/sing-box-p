@@ -86,6 +86,7 @@ type tunOptions struct {
 	*tun.Options
 	routeRanges []netip.Prefix
 	option.TunPlatformOptions
+	androidVPNRouteBypass bool
 }
 
 func (o *tunOptions) GetInet4Address() RoutePrefixIterator {
@@ -117,7 +118,7 @@ func (o *tunOptions) GetAutoRoute() bool {
 }
 
 func (o *tunOptions) GetAndroidVPNRouteBypass() bool {
-	return o.AndroidVPNRouteBypass
+	return o.androidVPNRouteBypass
 }
 
 func (o *tunOptions) GetStrictRoute() bool {

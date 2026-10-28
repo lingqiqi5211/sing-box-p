@@ -79,6 +79,11 @@ func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextL
 		include:         (*regexp.Regexp)(options.Include),
 		useAllProviders: options.UseAllProviders,
 	}
+	for i, tag := range outbound.tags {
+		if slices.Contains(outbound.tags[:i], tag) {
+			return nil, E.New("duplicate tag: ", tag)
+		}
+	}
 	return outbound, nil
 }
 

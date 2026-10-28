@@ -15,8 +15,10 @@ import (
 	"unicode"
 
 	"github.com/sagernet/sing-box/adapter"
+	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-tun"
+	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 )
 
@@ -86,7 +88,7 @@ func (s *linuxSearcher) FindProcessInfoMode(ctx context.Context, network string,
 	}
 	completeProcessInfo(processInfo, s.packageManager)
 	if mode == LookupOwner && len(processInfo.PackageNames) > 0 {
-		processInfo.ProcessPaths = s.processPathCache.cached(inode, uid)
+		processInfo.ProcessPaths = filterProcessPaths(s.processPathCache.cached(inode, uid))
 		return processInfo, nil
 	}
 	processPaths, err := s.processPathCache.find(ctx, inode, uid, mode == LookupFull)
@@ -96,9 +98,20 @@ func (s *linuxSearcher) FindProcessInfoMode(ctx context.Context, network string,
 		}
 		s.logger.DebugContext(ctx, "find process path: ", err)
 	} else {
-		processInfo.ProcessPaths = processPaths
+		processInfo.ProcessPaths = filterProcessPaths(processPaths)
 	}
 	return processInfo, nil
+}
+
+// Android applications are forked from zygote, so their executable is
+// app_process and identifies no application.
+func filterProcessPaths(processPaths []string) []string {
+	if !C.IsAndroid {
+		return processPaths
+	}
+	return common.Filter(processPaths, func(processPath string) bool {
+		return !strings.HasPrefix(processPath, "/system/bin/app_process")
+	})
 }
 
 // FindProcessInfoByPID resolves process metadata without scanning socket file
@@ -110,7 +123,7 @@ func FindProcessInfoByPID(processID uint32, userID uint32, packageManager tun.Pa
 	}
 	processPath, err := os.Readlink(filepath.Join(pathProc, strconv.FormatUint(uint64(processID), 10), "exe"))
 	if err == nil {
-		processInfo.ProcessPaths = []string{processPath}
+		processInfo.ProcessPaths = filterProcessPaths([]string{processPath})
 	}
 	completeProcessInfo(processInfo, packageManager)
 	return processInfo, err

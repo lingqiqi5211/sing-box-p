@@ -7,7 +7,6 @@ type PlatformInterface interface {
 	UsePlatformAutoDetectInterfaceControl() bool
 	AutoDetectInterfaceControl(fd int32) error
 	OpenTun(options TunOptions) (int32, error)
-	UseProcFS() bool
 	FindConnectionOwner(ipProtocol int32, sourceAddress string, sourcePort int32, destinationAddress string, destinationPort int32) (*ConnectionOwner, error)
 	StartDefaultInterfaceMonitor(listener InterfaceUpdateListener) error
 	CloseDefaultInterfaceMonitor(listener InterfaceUpdateListener) error
@@ -30,7 +29,14 @@ type PlatformInterface interface {
 	TailscaleHostname() string
 	UsePlatformBridge() bool
 	CreateBridge(options *BridgeOptions) (BridgeSession, error)
+}
+
+// PlatformAutoRedirect is an optional root-service extension. Clients that support
+// it must register it with CommandServer.SetPlatformAutoRedirect before starting.
+type PlatformAutoRedirect interface {
 	UsePlatformAutoRedirect() bool
+	// CreateAutoRedirectListener returns a listening socket owned by the caller.
+	CreateAutoRedirectListener(inet6 bool) (int32, error)
 	CreateAutoRedirect(options []byte, handler AutoRedirectHandler) (AutoRedirectSession, error)
 }
 

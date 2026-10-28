@@ -3,22 +3,26 @@
 package tun
 
 import (
+	"net"
 	"net/netip"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/srs"
 	"github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
+	"github.com/sagernet/sing/common/control"
 	E "github.com/sagernet/sing/common/exceptions"
+	M "github.com/sagernet/sing/common/metadata"
 
 	"golang.org/x/sys/unix"
 )
 
 type platformAutoRedirect struct {
 	inbound        *Inbound
-	redirectServer *tun.RedirectServer
+	redirectServer *platformRedirectServer
 	sessionAccess  sync.Mutex
 	session        adapter.AutoRedirectSession
 }
@@ -33,14 +37,19 @@ func (r *platformAutoRedirect) Start() error {
 	if len(r.inbound.tunOptions.Inet6Address) > 0 {
 		listenAddress = netip.IPv6Unspecified()
 	}
-	redirectServer := tun.NewRedirectServer(r.inbound.ctx, handler, r.inbound.logger, listenAddress)
-	if listenAddress.Is6() {
-		redirectServer.SetExternalTransparent()
-	}
-	err := redirectServer.Start()
+	// Android isolates loopback traffic between users. The root service must
+	// create the listener so cloned/work-profile apps can reach it; passing an
+	// app-owned socket to root to configure it does not change its identity.
+	fd, err := r.inbound.platformInterface.CreateAutoRedirectListener(listenAddress.Is6())
 	if err != nil {
-		return E.Cause(err, "start redirect server")
+		return E.Cause(err, "create redirect listener")
 	}
+	listener, err := autoRedirectListenerFromFD(fd)
+	if err != nil {
+		return E.Cause(err, "adopt redirect listener")
+	}
+	redirectServer := &platformRedirectServer{TCPListener: listener, inbound: r.inbound}
+	go redirectServer.serve()
 	session, err := r.inbound.platformInterface.CreateAutoRedirect(adapter.AutoRedirectOptions{
 		TunOptions:                     &r.inbound.tunOptions,
 		TableName:                      "sing-box",
@@ -58,6 +67,89 @@ func (r *platformAutoRedirect) Start() error {
 	r.session = session
 	r.sessionAccess.Unlock()
 	return nil
+}
+
+// platformRedirectServer accepts the root-owned listener without requiring a
+// fork-specific sing-tun API. Root configures transparent IPv6 on the same socket.
+type platformRedirectServer struct {
+	*net.TCPListener
+	inbound *Inbound
+}
+
+func (s *platformRedirectServer) Port() uint16 {
+	return M.AddrPortFromNet(s.Addr()).Port()
+}
+
+func (s *platformRedirectServer) ListenerFileDescriptor() (int, error) {
+	return control.Conn0(s.TCPListener, func(fd uintptr) (int, error) {
+		return unix.FcntlInt(fd, unix.F_DUPFD_CLOEXEC, 0)
+	})
+}
+
+func (s *platformRedirectServer) serve() {
+	defer s.Close()
+	var retryDelay time.Duration
+	for {
+		conn, err := s.AcceptTCP()
+		if err != nil {
+			if E.IsClosed(err) {
+				return
+			}
+			if netError, ok := err.(net.Error); ok && netError.Temporary() {
+				if retryDelay == 0 {
+					retryDelay = 5 * time.Millisecond
+				} else {
+					retryDelay = min(retryDelay*2, time.Second)
+				}
+				timer := time.NewTimer(retryDelay)
+				select {
+				case <-s.inbound.ctx.Done():
+					timer.Stop()
+					return
+				case <-timer.C:
+				}
+				continue
+			}
+			s.inbound.logger.Error("serve redirect listener: ", err)
+			return
+		}
+		retryDelay = 0
+		source := M.SocksaddrFromNet(conn.RemoteAddr()).Unwrap()
+		var destination M.Socksaddr
+		if !source.IsIPv4() {
+			destination = M.SocksaddrFromNet(conn.LocalAddr()).Unwrap()
+		} else {
+			originalDestination, destinationErr := control.GetOriginalDestination(conn)
+			if destinationErr != nil {
+				_ = conn.SetLinger(0)
+				_ = conn.Close()
+				s.inbound.logger.Error("get redirect destination: ", destinationErr)
+				continue
+			}
+			destination = M.SocksaddrFromNetIP(originalDestination).Unwrap()
+		}
+		go (*autoRedirectHandler)(s.inbound).NewConnectionEx(s.inbound.ctx, conn, source, destination, nil)
+	}
+}
+
+// autoRedirectListenerFromFD consumes fd on both success and failure.
+func autoRedirectListenerFromFD(fd int) (*net.TCPListener, error) {
+	file := os.NewFile(uintptr(fd), "redirect-listener")
+	if file == nil {
+		return nil, os.ErrInvalid
+	}
+	defer file.Close()
+	// FileListener duplicates fd; the temporary file must still be closed.
+	listener, err := net.FileListener(file)
+	if err != nil {
+		return nil, err
+	}
+	tcpListener, loaded := listener.(*net.TCPListener)
+	if !loaded {
+		_ = listener.Close()
+		return nil, E.New("redirect listener is not TCP")
+	}
+	return tcpListener, nil
 }
 
 func (r *platformAutoRedirect) routeAddressSetFileDescriptor() (int, error) {

@@ -75,7 +75,7 @@ func (s *Server) downloadExternalUI() error {
 	if s.lastEtag != "" {
 		request.Header.Set("If-None-Match", s.lastEtag)
 	}
-	response, err := httpClient.Do(request.WithContext(interrupt.ContextWithIsResourceDownload(s.ctx)))
+	response, err := httpClient.Do(request.WithContext(interrupt.ContextWithIsResourceDownload(s.ctx, true)))
 	if err != nil {
 		return err
 	}

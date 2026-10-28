@@ -31,6 +31,7 @@ var (
 	_ adapter.OutboundWithPreferredRoutes = (*Endpoint)(nil)
 	_ adapter.FlowOutboundDomainResolver  = (*Endpoint)(nil)
 	_ adapter.InterfaceUpdateListener     = (*Endpoint)(nil)
+	_ adapter.OutboundWithMultiplex       = (*Endpoint)(nil)
 	_ adapter.OnDemandEndpoint            = (*Endpoint)(nil)
 	_ dialer.PacketDialerWithDestination  = (*Endpoint)(nil)
 )
@@ -46,6 +47,8 @@ type Endpoint struct {
 	dnsRouter            adapter.DNSRouter
 	logger               logger.ContextLogger
 	localAddresses       []netip.Prefix
+	system               bool
+	network              adapter.NetworkManager
 	endpoint             *wireguard.Endpoint
 	onDemand             bool
 	bindAccess           sync.Mutex
@@ -54,6 +57,9 @@ type Endpoint struct {
 }
 
 func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.WireGuardEndpointOptions) (adapter.Endpoint, error) {
+	if err := options.TCPCongestionControl.Validate(); err != nil {
+		return nil, err
+	}
 	ep := &Endpoint{
 		Adapter:        endpoint.NewAdapterWithDialerOptions(C.TypeWireGuard, tag, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, options.DialerOptions),
 		ctx:            ctx,
@@ -61,6 +67,7 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 		dnsRouter:      service.FromContext[adapter.DNSRouter](ctx),
 		logger:         logger,
 		localAddresses: options.Address,
+		system:         options.System,
 		onDemand:       options.OnDemand,
 	}
 	if options.Detour != "" && options.ListenPort != 0 {
@@ -84,17 +91,19 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 		udpTimeout = C.UDPTimeout
 	}
 	networkManager := service.FromContext[adapter.NetworkManager](ctx)
+	ep.network = networkManager
 	wgEndpoint, err := wireguard.NewEndpoint(wireguard.EndpointOptions{
-		Context:         ctx,
-		Logger:          logger,
-		System:          options.System,
-		Handler:         ep,
-		UDPTimeout:      udpTimeout,
-		ICMPTimeout:     C.ICMPTimeout,
-		UDPMapping:      tun.NATMapping(options.UDPMapping),
-		UDPFiltering:    tun.NATFiltering(options.UDPFiltering),
-		UDPNATMax:       options.UDPNATMax,
-		InterfaceFinder: networkManager.InterfaceFinder(),
+		TCPCongestionControl: string(options.TCPCongestionControl),
+		Context:              ctx,
+		Logger:               logger,
+		System:               options.System,
+		Handler:              ep,
+		UDPTimeout:           udpTimeout,
+		ICMPTimeout:          C.ICMPTimeout,
+		UDPMapping:           tun.NATMapping(options.UDPMapping),
+		UDPFiltering:         tun.NATFiltering(options.UDPFiltering),
+		UDPNATMax:            options.UDPNATMax,
+		InterfaceFinder:      networkManager.InterfaceFinder(),
 		EgressPoolOptions: tun.UDPEgressPoolOptions{
 			Logger:           logger,
 			InterfaceFinder:  networkManager.InterfaceFinder(),
@@ -172,6 +181,10 @@ func (w *Endpoint) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	return nil
 }
 
+func (w *Endpoint) MultiplexEnabled() bool {
+	return true
+}
+
 func (w *Endpoint) InterfaceUpdated(ctx context.Context) {
 	if !w.started.Load() {
 		return
@@ -230,7 +243,10 @@ func (w *Endpoint) DetachReturn(returnPath tun.Return) error {
 func (w *Endpoint) JudgeFlow(network uint8, source netip.AddrPort, destination netip.AddrPort, firstPacket []byte) tun.FlowVerdict {
 	for _, localPrefix := range w.localAddresses {
 		if localPrefix.Contains(destination.Addr()) {
-			return tun.FlowVerdict{Action: tun.ActionAccept}
+			if w.system {
+				return tun.FlowVerdict{Action: tun.ActionAccept}
+			}
+			return adapter.JudgeHostFlow(w.ctx, w.network, w.logger, network, source, destination)
 		}
 	}
 	return adapter.JudgeFlow(w.router, adapter.InboundContext{Inbound: w.Tag(), InboundType: w.Type()}, network, source, destination, firstPacket)

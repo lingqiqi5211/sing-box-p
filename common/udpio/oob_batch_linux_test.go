@@ -74,25 +74,32 @@ func TestOOBPacketBatchReadWriteIPv4(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	readBuffers, readOOBs, sources, err := reader.WaitReadOOBPackets()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer buf.ReleaseMulti(readBuffers)
-	if len(readBuffers) != len(sourceAddresses) || len(readOOBs) != len(sourceAddresses) || len(sources) != len(sourceAddresses) {
-		t.Fatalf("unexpected batch sizes: buffers=%d oobs=%d sources=%d", len(readBuffers), len(readOOBs), len(sources))
-	}
-	for index, buffer := range readBuffers {
-		payloadIndex := int(buffer.Byte(0)) - 1
-		if payloadIndex < 0 || payloadIndex >= len(sourceAddresses) {
-			t.Fatalf("unexpected payload: %v", buffer.Bytes())
+	seen := make(map[int]bool)
+	for len(seen) < len(sourceAddresses) {
+		readBuffers, readOOBs, sources, readErr := reader.WaitReadOOBPackets()
+		if readErr != nil {
+			t.Fatal(readErr)
 		}
-		if sources[index].Addr != sourceAddresses[payloadIndex] {
-			t.Fatalf("payload %d has source %v, want %v", payloadIndex, sources[index], sourceAddresses[payloadIndex])
+		if len(readBuffers) == 0 || len(readOOBs) != len(readBuffers) || len(sources) != len(readBuffers) {
+			buf.ReleaseMulti(readBuffers)
+			t.Fatalf("unexpected batch sizes: buffers=%d oobs=%d sources=%d", len(readBuffers), len(readOOBs), len(sources))
 		}
-		if !containsPacketInfo(readOOBs[index], unix.IPPROTO_IP, unix.IP_PKTINFO) {
-			t.Fatalf("payload %d is missing IP_PKTINFO: %v", payloadIndex, readOOBs[index])
-		}
+		func() {
+			defer buf.ReleaseMulti(readBuffers)
+			for index, buffer := range readBuffers {
+				payloadIndex := int(buffer.Byte(0)) - 1
+				if payloadIndex < 0 || payloadIndex >= len(sourceAddresses) || seen[payloadIndex] {
+					t.Fatalf("unexpected or duplicate payload: %v", buffer.Bytes())
+				}
+				seen[payloadIndex] = true
+				if sources[index].Addr != sourceAddresses[payloadIndex] {
+					t.Fatalf("payload %d has source %v, want %v", payloadIndex, sources[index], sourceAddresses[payloadIndex])
+				}
+				if !containsPacketInfo(readOOBs[index], unix.IPPROTO_IP, unix.IP_PKTINFO) {
+					t.Fatalf("payload %d is missing IP_PKTINFO: %v", payloadIndex, readOOBs[index])
+				}
+			}
+		}()
 	}
 }
 
@@ -137,18 +144,29 @@ func TestOOBPacketBatchReadWriteIPv6(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	readBuffers, readOOBs, sources, err := reader.WaitReadOOBPackets()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer buf.ReleaseMulti(readBuffers)
-	if len(readBuffers) != 2 || len(readOOBs) != 2 || len(sources) != 2 {
-		t.Fatalf("unexpected IPv6 batch sizes: %d/%d/%d", len(readBuffers), len(readOOBs), len(sources))
-	}
-	for index := range readBuffers {
-		if sources[index].Addr != source || !containsPacketInfo(readOOBs[index], unix.IPPROTO_IPV6, unix.IPV6_PKTINFO) {
-			t.Fatalf("unexpected IPv6 message %d: source=%v oob=%v", index, sources[index], readOOBs[index])
+	seen := make(map[string]bool)
+	for len(seen) < 2 {
+		readBuffers, readOOBs, sources, readErr := reader.WaitReadOOBPackets()
+		if readErr != nil {
+			t.Fatal(readErr)
 		}
+		if len(readBuffers) == 0 || len(readOOBs) != len(readBuffers) || len(sources) != len(readBuffers) {
+			buf.ReleaseMulti(readBuffers)
+			t.Fatalf("unexpected IPv6 batch sizes: %d/%d/%d", len(readBuffers), len(readOOBs), len(sources))
+		}
+		func() {
+			defer buf.ReleaseMulti(readBuffers)
+			for index, buffer := range readBuffers {
+				payload := string(buffer.Bytes())
+				if (payload != "first" && payload != "second") || seen[payload] {
+					t.Fatalf("unexpected or duplicate IPv6 payload: %q", payload)
+				}
+				seen[payload] = true
+				if sources[index].Addr != source || !containsPacketInfo(readOOBs[index], unix.IPPROTO_IPV6, unix.IPV6_PKTINFO) {
+					t.Fatalf("unexpected IPv6 message %d: source=%v oob=%v", index, sources[index], readOOBs[index])
+				}
+			}
+		}()
 	}
 }
 
@@ -213,4 +231,54 @@ func containsPacketInfo(oob []byte, level int, messageType int) bool {
 		}
 	}
 	return false
+}
+func TestOOBBatchBufferOwnershipAcrossReads(t *testing.T) {
+	receiver, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer receiver.Close()
+	sender, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sender.Close()
+	reader, ok := NewOOBPacketBatchReadWaiter(receiver, 256)
+	if !ok {
+		t.Fatal("no batch reader")
+	}
+	reader.InitializeReadWaiter(N.ReadWaitOptions{BatchSize: 2})
+	if err = receiver.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	target := receiver.LocalAddr().(*net.UDPAddr).AddrPort()
+	if _, err = sender.WriteToUDPAddrPort([]byte("first"), target); err != nil {
+		t.Fatal(err)
+	}
+	first, _, _, err := reader.WaitReadOOBPackets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	retained := append([]*buf.Buffer(nil), first...)
+	defer buf.ReleaseMulti(retained)
+
+	if _, err = sender.WriteToUDPAddrPort([]byte("second"), target); err != nil {
+		t.Fatal(err)
+	}
+	second, _, _, err := reader.WaitReadOOBPackets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer buf.ReleaseMulti(second)
+	if len(retained) != 1 || len(second) != 1 || retained[0] == second[0] {
+		t.Fatal("caller-owned buffers were reused")
+	}
+	if string(retained[0].Bytes()) != "first" || string(second[0].Bytes()) != "second" {
+		t.Fatal("next read changed a retained payload")
+	}
+	// Reinitialization releases only pending internal buffers.
+	reader.InitializeReadWaiter(N.ReadWaitOptions{BatchSize: 1})
+	if string(retained[0].Bytes()) != "first" || string(second[0].Bytes()) != "second" {
+		t.Fatal("reinitialization released caller-owned buffers")
+	}
 }

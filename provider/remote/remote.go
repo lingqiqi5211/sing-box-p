@@ -263,7 +263,7 @@ func (s *ProviderRemote) updateOnce() {
 }
 
 func (s *ProviderRemote) fetch(ctx context.Context, isStart bool) error {
-	ctx = interrupt.ContextWithIsResourceDownload(ctx)
+	ctx = interrupt.ContextWithIsResourceDownload(ctx, true)
 	if s.updating.Swap(true) {
 		return E.New("provider is updating")
 	}

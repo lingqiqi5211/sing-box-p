@@ -25,6 +25,57 @@ func TestCompileActionPolicyKeepsDestinationSemanticsInSync(t *testing.T) {
 	}
 }
 
+func TestSharedSourceDefaultPreservesIncludePolicy(t *testing.T) {
+	for _, test := range []struct {
+		cidrs, macs int
+		want        commonEBPF.Decision
+	}{
+		{0, 0, commonEBPF.DecisionIntercept},
+		{1, 0, commonEBPF.DecisionPass},
+		{0, 1, commonEBPF.DecisionPass},
+		{1, 1, commonEBPF.DecisionPass},
+	} {
+		if got := sharedSourceDefault(test.cidrs, test.macs); got != test.want {
+			t.Fatalf("CIDRs=%d MACs=%d: default=%v, want %v", test.cidrs, test.macs, got, test.want)
+		}
+	}
+}
+
+func TestPrivateBypassOptionsRemainIndependent(t *testing.T) {
+	for _, local := range []bool{false, true} {
+		for _, shared := range []bool{false, true} {
+			inbound := &Inbound{
+				localPolicy:         localUIDPolicy{BypassPrivateAddress: local},
+				sharedBypassPrivate: shared,
+				enableTCP:           true,
+				enableUDP:           true,
+			}
+			if _, err := inbound.compileActionPolicy(); err != nil {
+				t.Fatal(err)
+			}
+			for _, scope := range []struct {
+				enabled   bool
+				decisions []commonEBPF.CIDRDecision
+			}{{local, inbound.localInitialDestinations}, {shared, inbound.sharedInitialDestinations}} {
+				if !scope.enabled {
+					if len(scope.decisions) != 0 {
+						t.Fatalf("disabled private bypass emitted rules: %+v", scope.decisions)
+					}
+					continue
+				}
+				if len(scope.decisions) != len(eBPFPrivateDestinationPrefixes) {
+					t.Fatal("private bypass lost address ranges")
+				}
+				for index, prefix := range eBPFPrivateDestinationPrefixes {
+					if scope.decisions[index] != (commonEBPF.CIDRDecision{Prefix: prefix, Action: commonEBPF.DecisionPass}) {
+						t.Fatalf("private range %v lost its pass action", prefix)
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestCompileProcessUIDPolicySubtractsExcludedRanges(t *testing.T) {
 	inbound := &Inbound{
 		localPolicy: localUIDPolicy{
@@ -82,34 +133,6 @@ func TestCombineDestinationDecisionsRetainsStaticPasses(t *testing.T) {
 	}
 }
 
-func TestValidateActionPolicyScope(t *testing.T) {
-	tests := []struct {
-		name   string
-		local  commonEBPF.ActionScope
-		shared commonEBPF.ActionScope
-	}{
-		{
-			name:  "local source CIDR",
-			local: commonEBPF.ActionScope{SourceCIDR: []commonEBPF.CIDRDecision{{Prefix: netip.MustParsePrefix("192.0.2.0/24"), Action: commonEBPF.DecisionPass}}},
-		},
-		{
-			name:  "local source MAC",
-			local: commonEBPF.ActionScope{SourceMAC: []commonEBPF.MACDecision{{Address: commonEBPF.MACAddress{2, 0, 0, 0, 0, 1}, Action: commonEBPF.DecisionPass}}},
-		},
-		{
-			name:   "shared UID",
-			shared: commonEBPF.ActionScope{UID: []commonEBPF.UIDDecision{{Start: 1000, End: 1000, Action: commonEBPF.DecisionPass}}},
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if err := validateActionPolicyScope(commonEBPF.ActionPolicy{Local: test.local, Shared: test.shared}); err == nil {
-				t.Fatal("unsupported action scope was accepted")
-			}
-		})
-	}
-}
-
 func TestAppendDestinationPolicyForcesBypassExclude(t *testing.T) {
 	var scope commonEBPF.ActionScope
 	appendDestinationPolicy(&scope, true, nil, dnsModeRespectPolicy,
@@ -130,40 +153,53 @@ func TestAppendDestinationPolicyForcesBypassExclude(t *testing.T) {
 func TestNormalizeBypassExclude(t *testing.T) {
 	v4 := netip.MustParsePrefix("100.64.0.0/10")
 	v6 := netip.MustParsePrefix("fd7a:115c:a1e0::/48")
-	if got, err := normalizeBypassExclude("local.bypass_exclude", []netip.Prefix{v4, v6}); err != nil || len(got) != 2 {
+	if got, err := normalizeCIDRs("local.bypass_exclude", []netip.Prefix{v4, v6}); err != nil || len(got) != 2 {
 		t.Fatalf("valid v4+v6 rejected: %v, %v", got, err)
 	}
-	if _, err := normalizeBypassExclude("local.bypass_exclude", []netip.Prefix{v4, netip.MustParsePrefix("10.0.0.0/8")}); err == nil {
-		t.Fatal("two IPv4 prefixes accepted")
+	if _, err := normalizeCIDRs("local.bypass_exclude", []netip.Prefix{v4, netip.MustParsePrefix("10.0.0.0/8")}); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := normalizeBypassExclude("local.bypass_exclude", []netip.Prefix{v6, netip.MustParsePrefix("fd00::/8")}); err == nil {
-		t.Fatal("two IPv6 prefixes accepted")
+	if _, err := normalizeCIDRs("local.bypass_exclude", []netip.Prefix{v6, netip.MustParsePrefix("fd00::/8")}); err != nil {
+		t.Fatal(err)
 	}
 	// IPv4-mapped IPv6 is converted to its IPv4 form, not rejected outright.
-	mapped, err := normalizeBypassExclude("local.bypass_exclude", []netip.Prefix{netip.MustParsePrefix("::ffff:100.64.0.0/104")})
+	mapped, err := normalizeCIDRs("local.bypass_exclude", []netip.Prefix{netip.MustParsePrefix("::ffff:100.64.0.0/104")})
 	if err != nil || len(mapped) != 1 || mapped[0].String() != "100.0.0.0/8" {
 		t.Fatalf("IPv4-mapped IPv6 not converted to IPv4: %v, %v", mapped, err)
 	}
-	if got, err := normalizeBypassExclude("local.bypass_exclude", nil); err != nil || got != nil {
+	if got, err := normalizeCIDRs("local.bypass_exclude", nil); err != nil || got != nil {
 		t.Fatalf("empty input: got %v, %v", got, err)
 	}
 }
 
-func TestValidateBypassExcludeConflicts(t *testing.T) {
+func TestIndependentForcePrefixesWithFakeIP(t *testing.T) {
 	i := &Inbound{
-		localBypassExclude:  []netip.Prefix{netip.MustParsePrefix("100.64.0.0/10")},
-		sharedBypassExclude: []netip.Prefix{netip.MustParsePrefix("fd7a:115c:a1e0::/48")},
+		enableTCP: true, enableUDP: true,
+		localDNSMode: dnsModeRespectPolicy, sharedDNSMode: dnsModeRespectPolicy,
+		localBypassExclude:  []netip.Prefix{netip.MustParsePrefix("100.64.0.0/10"), netip.MustParsePrefix("10.0.0.0/8")},
+		sharedBypassExclude: []netip.Prefix{netip.MustParsePrefix("192.168.0.0/16")},
+		fakeIPIPv4Prefix:    netip.MustParsePrefix("198.18.0.0/15"),
+		fakeIPIPv6Prefix:    netip.MustParsePrefix("fd00::/48"),
 	}
-	if err := i.validateBypassExcludeConflicts(); err != nil {
+	if _, err := i.compileActionPolicy(); err != nil {
 		t.Fatal(err)
 	}
-	i.fakeIPIPv4Prefix = netip.MustParsePrefix("198.18.0.0/16")
-	if err := i.validateBypassExcludeConflicts(); err == nil {
-		t.Fatal("fakeip IPv4 conflict accepted")
-	}
-	i.fakeIPIPv4Prefix = netip.Prefix{}
-	i.fakeIPIPv6Prefix = netip.MustParsePrefix("fdfe:dcba:9876::/64")
-	if err := i.validateBypassExcludeConflicts(); err == nil {
-		t.Fatal("fakeip IPv6 conflict accepted")
+}
+
+func TestPortActionsExplicitlyEncodeDNSStage(t *testing.T) {
+	for _, mode := range []string{dnsModeHijack, dnsModeRespectPolicy, dnsModeOff} {
+		var scope commonEBPF.ActionScope
+		appendPortDecisions(&scope, nil, mode, true, true)
+		if len(scope.DestinationPort) != 2 {
+			t.Fatal("missing TCP/UDP actions")
+		}
+		for _, rule := range scope.DestinationPort {
+			if rule.Port != 53 || rule.AfterSelectors != (mode == dnsModeRespectPolicy) {
+				t.Fatalf("wrong DNS stage: %+v", rule)
+			}
+			if (rule.Action == commonEBPF.DecisionPass) != (mode == dnsModeOff) {
+				t.Fatalf("wrong DNS action: %+v", rule)
+			}
+		}
 	}
 }

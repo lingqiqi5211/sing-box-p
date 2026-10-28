@@ -34,12 +34,20 @@ func (i *Inbound) newTCConnection(
 	source := M.SocksaddrFromNet(conn.RemoteAddr()).AddrPort()
 	destination := M.SocksaddrFromNet(conn.LocalAddr()).AddrPort()
 	assignment, err := backend.LookupAssignment(commonEBPF.ProtocolTCP, source, destination, 0, true)
+	i.requestTCAssignmentMaintenance()
 	if err != nil {
 		i.counters.assignmentLookupFailures.Add(1)
 		i.tcpWarnings.errorContext(i.logger, ctx, "lookup TC eBPF TCP assignment: ", err)
 		_ = conn.Close()
 		return
 	}
+	returnHandle, err := backend.AcquireReturnRoute(commonEBPF.ProtocolTCP, source, destination)
+	if err != nil {
+		i.tcpWarnings.errorContext(i.logger, ctx, "retain TC eBPF TCP return route: ", err)
+		_ = conn.Close()
+		return
+	}
+	onClose = N.AppendClose(onClose, N.OnceClose(func(error) { returnHandle.Release() }))
 	metadata.Inbound = i.Tag()
 	metadata.InboundType = i.Type()
 	metadata.Source = M.SocksaddrFromNetIP(source)
@@ -58,7 +66,7 @@ func (i *Inbound) newTCPacket(
 	source M.Socksaddr,
 	takeOwnership bool,
 ) bool {
-	_, destination, interfaceIndex, err := packetDestinationsFromOOB(oob)
+	_, destination, _, err := packetDestinationsFromOOB(oob)
 	if err != nil {
 		i.udpWarnings.packetInfo.warn(i.logger, "read TC eBPF UDP destination: ", err)
 		return false
@@ -68,12 +76,11 @@ func (i *Inbound) newTCPacket(
 		return false
 	}
 	client := source.AddrPort()
-	assignmentKeyInterfaceIndex := interfaceIndex
+	// The receiving ifindex belongs to the isolated namespace, not the
+	// original host interface. Original interface metadata is in the value.
+	assignmentKeyInterfaceIndex := uint32(0)
 	assignment, err := backend.LookupAssignment(commonEBPF.ProtocolUDP, client, destination, assignmentKeyInterfaceIndex, false)
-	if err != nil && interfaceIndex != 0 {
-		assignmentKeyInterfaceIndex = 0
-		assignment, err = backend.LookupAssignment(commonEBPF.ProtocolUDP, client, destination, assignmentKeyInterfaceIndex, false)
-	}
+	i.requestTCAssignmentMaintenance()
 	if err != nil {
 		i.counters.assignmentLookupFailures.Add(1)
 		i.udpWarnings.originalDestination.warn(i.logger, "lookup TC eBPF UDP assignment: ", err)
@@ -94,6 +101,14 @@ func (i *Inbound) newTCPacket(
 		InterfaceIndex: assignment.InterfaceIndex,
 	}
 	i.udpClientTable.setDirectAssignmentBinding(key, destination, sourceMAC, assignmentKeyInterfaceIndex, assignment)
+	state, loaded := i.udpClientTable.load(key)
+	if !loaded {
+		return false
+	}
+	if err = state.retainTCReturn(backend, client, destination); err != nil {
+		i.udpWarnings.originalDestination.warn(i.logger, "retain TC eBPF UDP return route: ", err)
+		return false
+	}
 	if takeOwnership {
 		i.udpNat.NewPacketBuffer(key, buffer, source, M.SocksaddrFromNetIP(destination), nil)
 		return true
@@ -132,9 +147,17 @@ func (i *Inbound) prepareTCPacketConnection(
 ) (bool, context.Context, N.PacketWriter, N.CloseHandlerFunc) {
 	ctx := log.ContextWithNewID(i.ctx)
 	clientState := i.udpClientTable.loadOrCreate(key)
-	writer := &tcPacketWriter{inbound: i, key: key, clientState: clientState}
+	var writer N.PacketWriter
+	if key.Scope == udpSessionScopeLocalCgroup {
+		writer = &cgroupPacketWriter{inbound: i, key: key, clientState: clientState}
+	} else {
+		writer = &tcPacketWriter{inbound: i, key: key, clientState: clientState}
+	}
 	return true, ctx, writer, func(error) {
 		cleanup := i.udpClientTable.deleteWithCleanup(key, clientState)
+		for _, handle := range cleanup.tcReturns {
+			handle.Release()
+		}
 		i.deleteCgroupUDPRedirects(cleanup.cgroupRedirects)
 		i.deleteTCAssignments(key, cleanup.tcAssignments)
 	}
@@ -177,12 +200,8 @@ type tcPacketWriter struct {
 func (w *tcPacketWriter) WritePacket(buffer *buf.Buffer, destination M.Socksaddr) error {
 	defer buffer.Release()
 	destinationAddress := destination.AddrPort()
-	binding, err := w.ensureReplyBinding(destinationAddress)
-	if err != nil {
+	if _, err := w.ensureReplyBinding(destinationAddress); err != nil {
 		return err
-	}
-	if w.clientState.isCgroupDataPlane() {
-		return w.inbound.listeners.writeUDP(buffer.Bytes(), binding.packetInfo, w.key.Source, binding.redirectAddress)
 	}
 	entry, release, err := w.inbound.udpReplySockets.get(destinationAddress, w.replySocketFactory())
 	if err != nil {
@@ -196,29 +215,6 @@ func (w *tcPacketWriter) WritePacket(buffer *buf.Buffer, destination M.Socksaddr
 
 func (w *tcPacketWriter) ensureReplyBinding(destinationAddress netip.AddrPort) (udpRedirectBinding, error) {
 	binding, loaded := w.clientState.redirectBinding(destinationAddress)
-	if !loaded {
-		if w.clientState.isCgroupDataPlane() {
-			backend := w.inbound.cgroupBackendInstance()
-			if backend == nil {
-				return udpRedirectBinding{}, E.New("cgroup eBPF backend is closed")
-			}
-			redirectAddress, err := backend.ReserveUDPReplyRedirect(destinationAddress, w.inbound.listeners.selectedPort())
-			if err != nil {
-				return udpRedirectBinding{}, err
-			}
-			if !w.inbound.udpClientTable.setCgroupReplyBinding(w.key, w.clientState, destinationAddress, redirectAddress) {
-				_ = backend.DeleteRedirect(
-					commonEBPF.ProtocolUDP,
-					netip.AddrPortFrom(redirectAddress, w.inbound.listeners.selectedPort()),
-				)
-				return udpRedirectBinding{}, E.New("cgroup eBPF UDP reply binding was rejected")
-			}
-			binding, loaded = w.clientState.redirectBinding(destinationAddress)
-			if !loaded {
-				return udpRedirectBinding{}, E.New("cgroup eBPF UDP reply binding is unavailable")
-			}
-		}
-	}
 	if !loaded {
 		if !w.clientState.hasAddressFamily(destinationAddress.Addr().Is4()) {
 			return udpRedirectBinding{}, E.New("TC eBPF UDP reply alias limit reached or address family unavailable")
@@ -236,6 +232,15 @@ func (w *tcPacketWriter) ensureReplyBinding(destinationAddress netip.AddrPort) (
 			return udpRedirectBinding{}, E.New("TC eBPF UDP reply binding is unavailable")
 		}
 	}
+	if w.newReplySocket == nil {
+		backend := w.inbound.tcBackend()
+		if backend == nil {
+			return udpRedirectBinding{}, E.New("TC eBPF backend is closed")
+		}
+		if err := w.clientState.retainTCReplyReturn(backend, destinationAddress); err != nil {
+			return udpRedirectBinding{}, err
+		}
+	}
 	return binding, nil
 }
 
@@ -243,20 +248,6 @@ func (w *tcPacketWriter) WritePacketBatch(buffers []*buf.Buffer, destinations []
 	if len(buffers) == 0 || len(buffers) != len(destinations) {
 		buf.ReleaseMulti(buffers)
 		return os.ErrInvalid
-	}
-	if w.clientState.isCgroupDataPlane() {
-		packetInfos := make([][]byte, len(buffers))
-		sources := make([]netip.Addr, len(buffers))
-		for index, destination := range destinations {
-			binding, err := w.ensureReplyBinding(destination.AddrPort())
-			if err != nil {
-				buf.ReleaseMulti(buffers)
-				return err
-			}
-			packetInfos[index] = binding.packetInfo
-			sources[index] = binding.redirectAddress
-		}
-		return w.inbound.listeners.writeUDPBatch(buffers, packetInfos, w.key.Source, sources)
 	}
 	type packetGroup struct {
 		buffers      []*buf.Buffer
@@ -266,12 +257,14 @@ func (w *tcPacketWriter) WritePacketBatch(buffers []*buf.Buffer, destinations []
 	client := M.SocksaddrFromNetIP(w.key.Source)
 	for index, destination := range destinations {
 		destinationAddress := destination.AddrPort()
-		if _, err := w.ensureReplyBinding(destinationAddress); err != nil {
-			buf.ReleaseMulti(buffers)
-			return err
-		}
 		group := groups[destinationAddress]
 		if group == nil {
+			// All packets in this group share one session and destination.
+			// Validate/retain once per batch, never cache across batches.
+			if _, err := w.ensureReplyBinding(destinationAddress); err != nil {
+				buf.ReleaseMulti(buffers)
+				return err
+			}
 			group = &packetGroup{}
 			groups[destinationAddress] = group
 		}
@@ -367,7 +360,14 @@ func (i *Inbound) newTCUDPReplySocket(source netip.AddrPort) (*net.UDPConn, func
 		}
 		return nil
 	})
-	packetConnection, err := listenConfig.ListenPacket(i.ctx, network, source.String())
+	i.tcNamespaceAccess.RLock()
+	defer i.tcNamespaceAccess.RUnlock()
+	if i.tcNamespace == nil || i.tcNamespace.Path() == "" {
+		return nil, nil, E.New("TC eBPF network namespace is closed")
+	}
+	packetConnection, err := listener.ListenNetworkNamespace(i.ctx, i.tcNamespace.Path(), func() (net.PacketConn, error) {
+		return listenConfig.ListenPacket(i.ctx, network, source.String())
+	})
 	if err != nil {
 		return nil, nil, E.Cause(err, "bind TC eBPF UDP reply socket to ", source)
 	}

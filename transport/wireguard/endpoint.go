@@ -89,7 +89,7 @@ func NewEndpoint(options EndpointOptions) (*Endpoint, error) {
 		}
 		if len(rawPeer.Reserved) > 0 {
 			if len(rawPeer.Reserved) != 3 {
-				return nil, E.New("invalid reserved value for peer ", peerIndex, ", required 3 bytes, got ", len(peer.reserved))
+				return nil, E.New("invalid reserved value for peer ", peerIndex, ", required 3 bytes, got ", len(rawPeer.Reserved))
 			}
 			copy(peer.reserved[:], rawPeer.Reserved[:])
 		}
@@ -120,22 +120,23 @@ func NewEndpoint(options EndpointOptions) (*Endpoint, error) {
 func (e *Endpoint) Initialize(memoryPressure func() tun.MemoryPressure) error {
 	options := e.options
 	deviceOptions := DeviceOptions{
-		Context:         options.Context,
-		Logger:          options.Logger,
-		System:          options.System,
-		Handler:         options.Handler,
-		UDPTimeout:      options.UDPTimeout,
-		ICMPTimeout:     options.ICMPTimeout,
-		UDPMapping:      options.UDPMapping,
-		UDPFiltering:    options.UDPFiltering,
-		UDPNATMax:       options.UDPNATMax,
-		InterfaceFinder: options.InterfaceFinder,
-		MemoryPressure:  memoryPressure,
-		CreateDialer:    options.CreateDialer,
-		Name:            options.Name,
-		MTU:             options.MTU,
-		Address:         options.Address,
-		AllowedAddress:  e.allowedAddress,
+		TCPCongestionControl: options.TCPCongestionControl,
+		Context:              options.Context,
+		Logger:               options.Logger,
+		System:               options.System,
+		Handler:              options.Handler,
+		UDPTimeout:           options.UDPTimeout,
+		ICMPTimeout:          options.ICMPTimeout,
+		UDPMapping:           options.UDPMapping,
+		UDPFiltering:         options.UDPFiltering,
+		UDPNATMax:            options.UDPNATMax,
+		InterfaceFinder:      options.InterfaceFinder,
+		MemoryPressure:       memoryPressure,
+		CreateDialer:         options.CreateDialer,
+		Name:                 options.Name,
+		MTU:                  options.MTU,
+		Address:              options.Address,
+		AllowedAddress:       e.allowedAddress,
 	}
 	tunDevice, err := NewDevice(deviceOptions)
 	if err != nil {
@@ -371,21 +372,24 @@ func (e *Endpoint) BindUpdate() error {
 }
 
 func (e *Endpoint) onPauseUpdated(event int) {
+	switch event {
+	case pause.EventNetworkPause, pause.EventNetworkWake:
+		go e.updateNetworkPause()
+	}
+}
+
+func (e *Endpoint) updateNetworkPause() {
 	e.stateAccess.Lock()
 	defer e.stateAccess.Unlock()
 	wgDevice := e.device.Load()
 	if wgDevice == nil {
 		return
 	}
-	switch event {
-	case pause.EventNetworkPause:
-		e.networkPaused = true
+	e.networkPaused = e.pause.IsNetworkPaused()
+	if e.networkPaused {
 		wgDevice.Down()
-	case pause.EventNetworkWake:
-		e.networkPaused = false
-		if !e.suspended.Load() {
-			wgDevice.Up()
-		}
+	} else if !e.suspended.Load() {
+		wgDevice.Up()
 	}
 }
 

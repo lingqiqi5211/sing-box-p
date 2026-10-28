@@ -23,6 +23,8 @@ func RegisterOutbound(registry *outbound.Registry) {
 	outbound.Register[option.HTTPOutboundOptions](registry, C.TypeHTTP, NewOutbound)
 }
 
+var _ adapter.OutboundWithMultiplex = (*Outbound)(nil)
+
 type Outbound struct {
 	outbound.Adapter
 	logger logger.ContextLogger
@@ -48,6 +50,7 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 		Headers:                headers,
 		Version:                http.ResolveVersion(options.Version, options.Path, headers.Get("Host")),
 		DisableVersionFallback: options.DisableVersionFallback,
+		UDPFastOpen:            options.UDPFastOpen,
 		HTTP2Options:           options.HTTP2Options,
 		HTTP3Options:           options.HTTP3Options,
 		H3CongestionControl:    options.H3CongestionControl,
@@ -60,6 +63,10 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 		logger:  logger,
 		client:  client,
 	}, nil
+}
+
+func (h *Outbound) MultiplexEnabled() bool {
+	return h.client.MultiplexEnabled()
 }
 
 func (h *Outbound) InterfaceUpdated(ctx context.Context) {

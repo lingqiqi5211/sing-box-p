@@ -152,7 +152,7 @@ func (s *RemoteRuleSet) Update(ctx context.Context) error {
 }
 
 func (s *RemoteRuleSet) fetch(ctx context.Context, isStart bool) error {
-	ctx = interrupt.ContextWithIsResourceDownload(ctx)
+	ctx = interrupt.ContextWithIsResourceDownload(ctx, true)
 	if s.updating.Swap(true) {
 		return E.New("rule-set is updating")
 	}

@@ -63,7 +63,7 @@ func TestResourceDownloadConnectionPoolIsolation(t *testing.T) {
 				request := func(download bool) {
 					ctx := context.Background()
 					if download {
-						ctx = interrupt.ContextWithIsResourceDownload(ctx)
+						ctx = interrupt.ContextWithIsResourceDownload(ctx, true)
 					}
 					req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
 					require.NoError(t, err)
@@ -116,7 +116,7 @@ func TestResourceDownloadResetPreservesActiveBody(t *testing.T) {
 		return newHTTP1Transport(resourceDownloadDialer(dialer, download), nil), nil
 	}}
 	defer transport.close()
-	ctx, cancel := context.WithCancel(interrupt.ContextWithIsResourceDownload(context.Background()))
+	ctx, cancel := context.WithCancel(interrupt.ContextWithIsResourceDownload(context.Background(), true))
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
 	require.NoError(t, err)

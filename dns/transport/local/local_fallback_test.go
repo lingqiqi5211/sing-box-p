@@ -75,7 +75,7 @@ func fallbackTestTransport(t *testing.T, resolver ResolvedResolver, destination 
 	transport := &Transport{
 		ctx: context.Background(), logger: log.NewNOPFactory().Logger(),
 		preferredResolver: &PreferredDomainResolver{}, resolved: resolver, dialer: N.SystemDialer,
-		configSource: &fallbackTestConfig{&systemconfig.Config{Servers: []M.Socksaddr{destination}, Ndots: 1, Attempts: 1, Timeout: time.Second}},
+		configSource: &fallbackTestConfig{&systemconfig.Config{Servers: []M.Socksaddr{destination}, SystemdResolved: true, Attempts: 1, Timeout: time.Second}},
 	}
 	t.Cleanup(func() {
 		if serverSet := transport.serverSet.Swap(nil); serverSet != nil {
@@ -124,7 +124,7 @@ func TestLocalResolvedFallback(t *testing.T) {
 		t.Fatal("backend change did not change environment")
 	}
 	resolver.fallback = true
-	transport.configSource.(*fallbackTestConfig).config = &systemconfig.Config{Servers: []M.Socksaddr{M.SocksaddrFrom(netip.MustParseAddr("192.0.2.53"), 53)}}
+	transport.configSource.(*fallbackTestConfig).config = &systemconfig.Config{Servers: []M.Socksaddr{M.SocksaddrFrom(netip.MustParseAddr("192.0.2.53"), 53)}, SystemdResolved: true}
 	if slices.Equal(initial, transport.Environment()) {
 		t.Fatal("nameserver change did not change environment")
 	}

@@ -156,7 +156,7 @@ func (d *dashboard) loadState() dashboardStatus {
 }
 
 func (d *dashboard) fetch(ctx context.Context) error {
-	ctx = interrupt.ContextWithIsResourceDownload(ctx)
+	ctx = interrupt.ContextWithIsResourceDownload(ctx, true)
 	d.logger.Info("updating dashboard from URL: ", d.url)
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, d.url, nil)
 	if err != nil {

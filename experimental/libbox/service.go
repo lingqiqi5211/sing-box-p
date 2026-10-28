@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"os"
 	"runtime"
 	"strconv"
 	"sync"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/experimental/libbox/internal/procfs"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/service/powerreport"
@@ -29,7 +29,7 @@ var _ adapter.PlatformInterface = (*platformInterfaceWrapper)(nil)
 
 type platformInterfaceWrapper struct {
 	iif                    PlatformInterface
-	useProcFS              bool
+	autoRedirect           PlatformAutoRedirect
 	networkManager         adapter.NetworkManager
 	powerManager           *powerreport.Manager
 	myTunName              string
@@ -57,7 +57,7 @@ func (w *platformInterfaceWrapper) UsePlatformInterface() bool {
 	return true
 }
 
-func (w *platformInterfaceWrapper) OpenInterface(options *tun.Options, platformOptions option.TunPlatformOptions) (tun.Tun, error) {
+func (w *platformInterfaceWrapper) OpenInterface(options *tun.Options, platformOptions option.TunPlatformOptions, androidVPNRouteBypass bool) (tun.Tun, error) {
 	if len(options.IncludeUID) > 0 || len(options.ExcludeUID) > 0 {
 		return nil, E.New("platform: unsupported uid options")
 	}
@@ -68,7 +68,12 @@ func (w *platformInterfaceWrapper) OpenInterface(options *tun.Options, platformO
 	if err != nil {
 		return nil, err
 	}
-	tunFd, err := w.iif.OpenTun(&tunOptions{options, routeRanges, platformOptions})
+	tunFd, err := w.iif.OpenTun(&tunOptions{
+		Options:               options,
+		routeRanges:           routeRanges,
+		TunPlatformOptions:    platformOptions,
+		androidVPNRouteBypass: androidVPNRouteBypass,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -193,33 +198,6 @@ func (w *platformInterfaceWrapper) UsePlatformConnectionOwnerFinder() bool {
 }
 
 func (w *platformInterfaceWrapper) FindConnectionOwner(request *adapter.FindConnectionOwnerRequest) (*adapter.ConnectionOwner, error) {
-	if w.useProcFS {
-		var source netip.AddrPort
-		var destination netip.AddrPort
-		sourceAddr, _ := netip.ParseAddr(request.SourceAddress)
-		source = netip.AddrPortFrom(sourceAddr, uint16(request.SourcePort))
-		destAddr, _ := netip.ParseAddr(request.DestinationAddress)
-		destination = netip.AddrPortFrom(destAddr, uint16(request.DestinationPort))
-
-		var network string
-		switch request.IpProtocol {
-		case int32(syscall.IPPROTO_TCP):
-			network = "tcp"
-		case int32(syscall.IPPROTO_UDP):
-			network = "udp"
-		default:
-			return nil, E.New("unknown protocol: ", request.IpProtocol)
-		}
-
-		uid := procfs.ResolveSocketByProcSearch(network, source, destination)
-		if uid == -1 {
-			return nil, E.New("procfs: not found")
-		}
-		return &adapter.ConnectionOwner{
-			UserId: uid,
-		}, nil
-	}
-
 	result, err := w.iif.FindConnectionOwner(request.IpProtocol, request.SourceAddress, request.SourcePort, request.DestinationAddress, request.DestinationPort)
 	if err != nil {
 		return nil, err
@@ -356,15 +334,26 @@ func (w *bridgeSessionWrapper) Close() error {
 }
 
 func (w *platformInterfaceWrapper) UsePlatformAutoRedirect() bool {
-	return w.iif.UsePlatformAutoRedirect()
+	return w.autoRedirect != nil && w.autoRedirect.UsePlatformAutoRedirect()
+}
+
+func (w *platformInterfaceWrapper) CreateAutoRedirectListener(inet6 bool) (int, error) {
+	if w.autoRedirect == nil {
+		return 0, os.ErrInvalid
+	}
+	fd, err := w.autoRedirect.CreateAutoRedirectListener(inet6)
+	return int(fd), err
 }
 
 func (w *platformInterfaceWrapper) CreateAutoRedirect(options adapter.AutoRedirectOptions) (adapter.AutoRedirectSession, error) {
+	if w.autoRedirect == nil {
+		return nil, os.ErrInvalid
+	}
 	encodedOptions, err := encodeAutoRedirectOptions(options)
 	if err != nil {
 		return nil, err
 	}
-	return w.iif.CreateAutoRedirect(encodedOptions, &autoRedirectHandlerWrapper{
+	return w.autoRedirect.CreateAutoRedirect(encodedOptions, &autoRedirectHandlerWrapper{
 		handler:                   options.Handler,
 		listenerFileDescriptor:    options.RedirectListenerFileDescriptor,
 		routeAddressSetDescriptor: options.RouteAddressSetFileDescriptor,

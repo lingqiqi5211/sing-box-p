@@ -67,6 +67,7 @@ func (*resolvedTestNetwork) InterfaceFinder() control.InterfaceFinder {
 	return control.NewDefaultInterfaceFinder()
 }
 func (*resolvedTestNetwork) AutoRedirectOutputMarkFunc() control.Func { return nil }
+func (*resolvedTestNetwork) FlushSystemDNSCache()                     {}
 
 type resolvedTestManager struct {
 	incompatible atomic.Bool
@@ -188,7 +189,7 @@ func testResolvedFallbackPrivateBusRecovery(t *testing.T, failure string) {
 	if err = finder.Update(); err != nil {
 		t.Fatal(err)
 	}
-	resolver := &DBusResolvedResolver{ctx: ctx, logger: log.NewNOPFactory().Logger(), interfaceFinder: finder, interfaceMonitor: &resolvedTestMonitor{}, systemBus: client}
+	resolver := &DBusResolvedResolver{ctx: ctx, logger: log.NewNOPFactory().Logger(), networkManager: service.FromContext[adapter.NetworkManager](ctx), interfaceFinder: finder, interfaceMonitor: &resolvedTestMonitor{}, systemBus: client}
 	if err = resolver.Start(); err != nil {
 		t.Fatal(err)
 	}

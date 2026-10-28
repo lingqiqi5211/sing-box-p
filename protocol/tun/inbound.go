@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/netip"
 	"os"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -54,6 +53,7 @@ type Inbound struct {
 	tunIf                   tun.Tun
 	tunStack                tun.Stack
 	platformInterface       adapter.PlatformInterface
+	usePlatformInterface    bool
 	platformOptions         option.TunPlatformOptions
 	enableAutoRedirect      bool
 	usePlatformAutoRedirect bool
@@ -169,7 +169,7 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 	}
 
 	tableIndex := options.IPRoute2TableIndex
-	if tableIndex == 0 {
+	if tableIndex == 0 && options.AutoRoute {
 		tableIndex = tun.DefaultIPRoute2TableIndex
 	}
 	ruleIndex := options.IPRoute2RuleIndex
@@ -247,13 +247,14 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 			Logger:                                logger,
 			EXP_MultiPendingPackets:               C.IsDarwin,
 		},
-		udpTimeout:        udpTimeout,
-		udpMapping:        tun.NATMapping(options.UDPMapping),
-		udpFiltering:      tun.NATFiltering(options.UDPFiltering),
-		udpNATMax:         options.UDPNATMax,
-		stack:             options.Stack,
-		platformInterface: platformInterface,
-		platformOptions:   common.PtrValueOrDefault(options.Platform),
+		udpTimeout:           udpTimeout,
+		udpMapping:           tun.NATMapping(options.UDPMapping),
+		udpFiltering:         tun.NATFiltering(options.UDPFiltering),
+		udpNATMax:            options.UDPNATMax,
+		stack:                options.Stack,
+		platformInterface:    platformInterface,
+		usePlatformInterface: usePlatformInterface,
+		platformOptions:      common.PtrValueOrDefault(options.Platform),
 	}
 	for _, routeAddressSet := range options.RouteAddressSet {
 		ruleSet, loaded := router.RuleSet(routeAddressSet)
@@ -285,8 +286,6 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 			return nil, E.New("`auto_redirect` mark mode cannot be disabled with `route_address_set` or `route_exclude_address_set`")
 		}
 		inbound.tunOptions.AutoRedirectMarkMode = !disableMarkMode
-		inbound.platformOptions.AndroidVPNRouteBypass = C.IsAndroid && inbound.usePlatformAutoRedirect &&
-			(len(inbound.routeRuleSet) > 0 || len(inbound.routeExcludeRuleSet) > 0)
 		inbound.dnsHijackByPort = inbound.tunOptions.DNSModeOrDefault() == tun.DNSModeHijack
 		if !inbound.usePlatformAutoRedirect && !disableMarkMode && options.NetNs == "" {
 			err = networkManager.RegisterAutoRedirectOutputMark(inbound.tunOptions.AutoRedirectOutputMarkOrDefault())
@@ -347,7 +346,7 @@ func (t *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 			t.dnsHijackAddress = append(inet4DNSAddress, inet6DNSAddress...)
 		}
 	case adapter.StartStateStart:
-		if t.platformInterface == nil &&
+		if !t.usePlatformInterface &&
 			((C.IsLinux && !t.tunOptions.GSO) || (C.IsDarwin && !t.tunOptions.EXP_MultiPendingPackets)) {
 			outboundManager := service.FromContext[adapter.OutboundManager](t.ctx)
 			endpointManager := service.FromContext[adapter.EndpointManager](t.ctx)
@@ -409,7 +408,7 @@ func (t *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 			routeAddressSet        []*netipx.IPSet
 			routeExcludeAddressSet []*netipx.IPSet
 		)
-		if t.autoRedirect != nil || t.platformInterface == nil || !t.platformInterface.UsePlatformInterface() {
+		if t.autoRedirect != nil || !t.usePlatformInterface {
 			for _, routeRuleSet := range t.routeRuleSet {
 				ipSets := routeRuleSet.ExtractIPSet()
 				if len(ipSets) == 0 {
@@ -450,7 +449,7 @@ func (t *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 		var tunInterface tun.Tun
 		monitor := taskmonitor.New(t.logger, C.StartTimeout)
 		tunOptions := t.tunOptions
-		if t.autoRedirect == nil && !(runtime.GOOS == "android" && t.platformInterface != nil) {
+		if t.autoRedirect == nil {
 			for _, ipSet := range routeAddressSet {
 				for _, prefix := range ipSet.Prefixes() {
 					if prefix.Addr().Is4() {
@@ -471,8 +470,10 @@ func (t *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 			}
 		}
 		monitor.Start("open interface")
-		if t.platformInterface != nil && t.platformInterface.UsePlatformInterface() {
-			tunInterface, err = t.platformInterface.OpenInterface(&tunOptions, t.platformOptions)
+		if t.usePlatformInterface {
+			// Routing bypass actions also need VPN route compatibility without address sets.
+			androidVPNRouteBypass := C.IsAndroid && t.usePlatformAutoRedirect
+			tunInterface, err = t.platformInterface.OpenInterface(&tunOptions, t.platformOptions, androidVPNRouteBypass)
 		} else {
 			tunInterface, err = tun.New(tunOptions)
 		}
@@ -535,6 +536,9 @@ func (t *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 		if err != nil {
 			return E.Cause(err, "starting TUN interface")
 		}
+		if routedPort, isRoutedPort := t.tunStack.(tun.RoutedPort); isRoutedPort {
+			t.networkManager.RegisterHostPort(routedPort)
+		}
 		if t.autoRedirect != nil {
 			scope.Add(t.autoRedirect.Close)
 			monitor.Start("initialize auto-redirect")
@@ -578,6 +582,20 @@ func (t *Inbound) InterfaceUpdated(ctx context.Context) {
 	if tunStack != nil {
 		tunStack.ResetNetwork()
 	}
+}
+
+func (t *Inbound) FlushSystemDNSCache() {
+	linuxTUN, isLinuxTUN := t.tunIf.(tun.LinuxTUN)
+	if !isLinuxTUN {
+		return
+	}
+	serviceManager := service.FromContext[adapter.ServiceManager](t.ctx)
+	if slices.ContainsFunc(serviceManager.Services(), func(it adapter.Service) bool {
+		return it.Type() == C.TypeResolved
+	}) {
+		return
+	}
+	linuxTUN.FlushDNSCache()
 }
 
 func (t *Inbound) JudgeFlow(network uint8, source netip.AddrPort, destination netip.AddrPort, firstPacket []byte) tun.FlowVerdict {

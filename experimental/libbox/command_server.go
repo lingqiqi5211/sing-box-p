@@ -2,13 +2,10 @@ package libbox
 
 import (
 	"context"
-	"errors"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
-	"syscall"
-	"time"
 
 	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
@@ -57,7 +54,6 @@ func NewCommandServer(handler CommandServerHandler, platformInterface PlatformIn
 	service.MustRegister[*powerreport.Manager](ctx, powerManager)
 	platformWrapper := &platformInterfaceWrapper{
 		iif:          platformInterface,
-		useProcFS:    platformInterface.UseProcFS(),
 		powerManager: powerManager,
 	}
 	service.MustRegister[adapter.PlatformInterface](ctx, platformWrapper)
@@ -99,6 +95,12 @@ func NewCommandServer(handler CommandServerHandler, platformInterface PlatformIn
 		}
 	}
 	return server, nil
+}
+
+// SetPlatformAutoRedirect registers the optional root-service extension.
+// Call this before starting the server or any service; do not change it while running.
+func (s *CommandServer) SetPlatformAutoRedirect(platform PlatformAutoRedirect) {
+	s.platformWrapper.autoRedirect = platform
 }
 
 func unaryAuthInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
@@ -145,19 +147,10 @@ func (s *CommandServer) Start() error {
 	if sCommandServerListenPort == 0 {
 		sockPath := filepath.Join(sBasePath, "command.sock")
 		os.Remove(sockPath)
-		for range 30 {
-			listener, err = net.ListenUnix("unix", &net.UnixAddr{
-				Name: sockPath,
-				Net:  "unix",
-			})
-			if err == nil {
-				break
-			}
-			if !errors.Is(err, syscall.EROFS) {
-				break
-			}
-			time.Sleep(time.Second)
-		}
+		listener, err = net.ListenUnix("unix", &net.UnixAddr{
+			Name: sockPath,
+			Net:  "unix",
+		})
 		if err != nil {
 			return E.Cause(err, "listen command server")
 		}
