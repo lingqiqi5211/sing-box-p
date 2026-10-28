@@ -26,7 +26,7 @@ jobs:
         run: |
           # Pinned: Go 1.27 miscompiles the //go:linkname hacks in common/badtls
           # and produces corrupted error values at runtime.
-          echo version=1.26.8 >> $GITHUB_OUTPUT
+          echo version=1.26.10 >> $GITHUB_OUTPUT
 
       - name: Setup Go
         uses: actions/setup-go@v6

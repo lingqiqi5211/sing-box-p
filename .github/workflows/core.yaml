@@ -33,7 +33,7 @@ jobs:
         id: go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.8'
+          go-version: '1.26.10'
           check-latest: true
 
       - name: Setup Variables
@@ -66,14 +66,14 @@ jobs:
             goamd64: v1
             runner: windows-latest
             cgo: 0
-            go-version: '1.26.8'
+            go-version: '1.26.10'
 
           - name: windows-arm64
             goos: windows
             goarch: arm64
             runner: windows-latest
             cgo: 0
-            go-version: '1.26.8'
+            go-version: '1.26.10'
 
           - name: linux-amd64
             goos: linux
@@ -81,7 +81,7 @@ jobs:
             goamd64: v1
             runner: ubuntu-latest
             cgo: 1
-            go-version: '1.26.8'
+            go-version: '1.26.10'
 
           - name: darwin-amd64
             goos: darwin
@@ -89,14 +89,14 @@ jobs:
             goamd64: v1
             runner: macos-latest
             cgo: 1
-            go-version: '1.26.8'
+            go-version: '1.26.10'
 
           - name: android-arm64
             goos: android
             goarch: arm64
             runner: ubuntu-latest
             cgo: 1
-            go-version: '1.26.8'
+            go-version: '1.26.10'
       fail-fast: false
 
     steps:
