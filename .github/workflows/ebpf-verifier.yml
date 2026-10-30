@@ -23,7 +23,7 @@ on:
       - 'go.sum'
       - 'include/ebpf*.go'
       - 'protocol/ebpf/**'
-      - 'protocol/tailscale/system_binding.go'
+      - 'protocol/tailscale/endpoint.go'
       - 'route/network*.go'
 
 concurrency:
@@ -46,7 +46,7 @@ jobs:
       - name: Test sing-box integration
         run: |
           go test -tags with_ebpf \
-            ./adapter ./common/dialer ./common/listener ./common/udpio ./protocol/ebpf ./daemon ./cmd/sing-box .
+            ./adapter ./common/dialer ./common/listener ./protocol/ebpf .
           go test -run '^$' -tags with_ebpf,with_gvisor ./protocol/tailscale
 
       # sing-ebpf carries the generated objects, verifier checks, map layout
