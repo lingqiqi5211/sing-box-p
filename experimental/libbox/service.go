@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"os"
 	"runtime"
 	"strconv"
 	"sync"
@@ -28,6 +29,7 @@ var _ adapter.PlatformInterface = (*platformInterfaceWrapper)(nil)
 
 type platformInterfaceWrapper struct {
 	iif                    PlatformInterface
+	autoRedirect           PlatformAutoRedirect
 	networkManager         adapter.NetworkManager
 	powerManager           *powerreport.Manager
 	myTunName              string
@@ -332,20 +334,26 @@ func (w *bridgeSessionWrapper) Close() error {
 }
 
 func (w *platformInterfaceWrapper) UsePlatformAutoRedirect() bool {
-	return w.iif.UsePlatformAutoRedirect()
+	return w.autoRedirect != nil && w.autoRedirect.UsePlatformAutoRedirect()
 }
 
 func (w *platformInterfaceWrapper) CreateAutoRedirectListener(inet6 bool) (int, error) {
-	fd, err := w.iif.CreateAutoRedirectListener(inet6)
+	if w.autoRedirect == nil {
+		return 0, os.ErrInvalid
+	}
+	fd, err := w.autoRedirect.CreateAutoRedirectListener(inet6)
 	return int(fd), err
 }
 
 func (w *platformInterfaceWrapper) CreateAutoRedirect(options adapter.AutoRedirectOptions) (adapter.AutoRedirectSession, error) {
+	if w.autoRedirect == nil {
+		return nil, os.ErrInvalid
+	}
 	encodedOptions, err := encodeAutoRedirectOptions(options)
 	if err != nil {
 		return nil, err
 	}
-	return w.iif.CreateAutoRedirect(encodedOptions, &autoRedirectHandlerWrapper{
+	return w.autoRedirect.CreateAutoRedirect(encodedOptions, &autoRedirectHandlerWrapper{
 		handler:                   options.Handler,
 		listenerFileDescriptor:    options.RedirectListenerFileDescriptor,
 		routeAddressSetDescriptor: options.RouteAddressSetFileDescriptor,

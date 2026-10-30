@@ -97,6 +97,12 @@ func NewCommandServer(handler CommandServerHandler, platformInterface PlatformIn
 	return server, nil
 }
 
+// SetPlatformAutoRedirect registers the optional root-service extension.
+// Call this before starting the server or any service; do not change it while running.
+func (s *CommandServer) SetPlatformAutoRedirect(platform PlatformAutoRedirect) {
+	s.platformWrapper.autoRedirect = platform
+}
+
 func unaryAuthInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	if sCommandServerSecret == "" {
 		return handler(ctx, req)

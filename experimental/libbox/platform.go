@@ -29,6 +29,11 @@ type PlatformInterface interface {
 	TailscaleHostname() string
 	UsePlatformBridge() bool
 	CreateBridge(options *BridgeOptions) (BridgeSession, error)
+}
+
+// PlatformAutoRedirect is an optional root-service extension. Clients that support
+// it must register it with CommandServer.SetPlatformAutoRedirect before starting.
+type PlatformAutoRedirect interface {
 	UsePlatformAutoRedirect() bool
 	// CreateAutoRedirectListener returns a listening socket owned by the caller.
 	CreateAutoRedirectListener(inet6 bool) (int32, error)
