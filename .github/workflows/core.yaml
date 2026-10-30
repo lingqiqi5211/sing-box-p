@@ -83,14 +83,6 @@ jobs:
             cgo: 1
             go-version: '1.26.10'
 
-          - name: darwin-amd64
-            goos: darwin
-            goarch: amd64
-            goamd64: v1
-            runner: macos-latest
-            cgo: 1
-            go-version: '1.26.10'
-
           - name: android-arm64
             goos: android
             goarch: arm64
@@ -183,7 +175,6 @@ jobs:
           mv sing-box-windows-arm64/sing-box.exe sing-box_windows_arm64.exe
           mv sing-box-windows-amd64/sing-box.exe sing-box_windows_amd64.exe
           mv sing-box-linux-amd64/sing-box sing-box_linux_amd64
-          mv sing-box-darwin-amd64/sing-box sing-box_darwin_amd64
           mv sing-box-android-arm64/sing-box sing-box_android_arm64
           # Remove empty directories
           find . -maxdepth 1 -type d -empty -delete
