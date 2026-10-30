@@ -7,10 +7,19 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing/common/control"
 	"github.com/sagernet/sing/service"
 
 	"github.com/stretchr/testify/require"
 )
+
+type tcpCongestionNetworkManager struct {
+	adapter.NetworkManager
+}
+
+func (tcpCongestionNetworkManager) InterfaceFinder() control.InterfaceFinder {
+	return nil
+}
 
 func TestTCPCongestionConstructorValidation(t *testing.T) {
 	for _, algorithm := range []option.TCPCongestionControl{"invalid", "none", "new_reno"} {
@@ -26,7 +35,7 @@ func TestTCPCongestionDeviceOptions(t *testing.T) {
 	for _, system := range []bool{false, true} {
 		for _, algorithm := range []option.TCPCongestionControl{"", "reno", "cubic", "bbr"} {
 			t.Run(fmt.Sprintf("system=%v/%s", system, algorithm), func(t *testing.T) {
-				ctx := service.ContextWith[adapter.NetworkManager](t.Context(), gsoTestNetworkManager{})
+				ctx := service.ContextWith[adapter.NetworkManager](t.Context(), tcpCongestionNetworkManager{})
 				options := newDeviceOptions(ctx, log.NewNOPFactory().Logger(), nil, option.MASQUEEndpointOptions{
 					System:               system,
 					TCPCongestionControl: algorithm,

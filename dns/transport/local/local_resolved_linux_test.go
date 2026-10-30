@@ -47,10 +47,6 @@ func TestResolvedUnavailableErrors(t *testing.T) {
 	}
 }
 
-type resolvedTestNetworkManager struct{ adapter.NetworkManager }
-
-func (*resolvedTestNetworkManager) FlushSystemDNSCache() {}
-
 type resolvedTestMonitor struct{ tun.DefaultInterfaceMonitor }
 
 func (*resolvedTestMonitor) DefaultInterface() *control.Interface {
@@ -71,6 +67,7 @@ func (*resolvedTestNetwork) InterfaceFinder() control.InterfaceFinder {
 	return control.NewDefaultInterfaceFinder()
 }
 func (*resolvedTestNetwork) AutoRedirectOutputMarkFunc() control.Func { return nil }
+func (*resolvedTestNetwork) FlushSystemDNSCache()                     {}
 
 type resolvedTestManager struct {
 	incompatible atomic.Bool
@@ -192,7 +189,7 @@ func testResolvedFallbackPrivateBusRecovery(t *testing.T, failure string) {
 	if err = finder.Update(); err != nil {
 		t.Fatal(err)
 	}
-	resolver := &DBusResolvedResolver{ctx: ctx, logger: log.NewNOPFactory().Logger(), interfaceFinder: finder, networkManager: &resolvedTestNetworkManager{}, interfaceMonitor: &resolvedTestMonitor{}, systemBus: client}
+	resolver := &DBusResolvedResolver{ctx: ctx, logger: log.NewNOPFactory().Logger(), networkManager: service.FromContext[adapter.NetworkManager](ctx), interfaceFinder: finder, interfaceMonitor: &resolvedTestMonitor{}, systemBus: client}
 	if err = resolver.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +295,7 @@ func TestResolvedDiscoveryCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolver := &DBusResolvedResolver{ctx: context.Background(), logger: log.NewNOPFactory().Logger(), networkManager: &resolvedTestNetworkManager{}, interfaceMonitor: &resolvedTestMonitor{}, systemBus: client}
+	resolver := &DBusResolvedResolver{ctx: context.Background(), logger: log.NewNOPFactory().Logger(), interfaceMonitor: &resolvedTestMonitor{}, systemBus: client}
 	defer resolver.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
