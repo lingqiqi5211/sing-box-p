@@ -91,7 +91,7 @@ func (m *Manager) Name() string {
 	return "connection history"
 }
 
-func (m *Manager) Start(stage adapter.StartStage) error {
+func (m *Manager) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateInitialize || m.started.Load() {
 		return nil
 	}
@@ -107,6 +107,7 @@ func (m *Manager) Start(stage adapter.StartStage) error {
 	m.started.Store(true)
 	go m.loop()
 	m.traffic.SetConnectionHistorySink(m)
+	scope.Add(m.Close)
 	m.logger.Info("connection history started at ", m.path)
 	return nil
 }
